@@ -1,0 +1,252 @@
+import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+
+/// BlueprintCanvas: An animated blueprint-inspired grid canvas
+/// 
+/// Features:
+/// - Deep blue gradient background (like traditional blueprint paper)
+/// - Gently breathing grid lines with animated glow
+/// - Subtle shimmer effect for depth and polish
+/// - Optimized for 60+ FPS performance
+/// - Future-ready for interactive layers
+class BlueprintCanvas extends StatefulWidget {
+  const BlueprintCanvas({super.key});
+
+  @override
+  State<BlueprintCanvas> createState() => _BlueprintCanvasState();
+}
+
+class _BlueprintCanvasState extends State<BlueprintCanvas>
+    with TickerProviderStateMixin {
+  late final AnimationController _glowController;
+  late final AnimationController _shimmerController;
+  late final Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Glow breathing animation - gentle 6 second cycle
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat(reverse: true);
+
+    // Use ease in-out curve for smooth, natural breathing
+    _glowAnimation = CurvedAnimation(
+      parent: _glowController,
+      curve: Curves.easeInOut,
+    );
+
+    // Shimmer animation - slow diagonal sweep every 12 seconds
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 12),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_glowAnimation, _shimmerController]),
+      builder: (context, _) {
+        // Calculate glow opacity: oscillates between 0.07 and 0.13
+        final double glowOpacity = 0.07 + (_glowAnimation.value * 0.06);
+        
+        return CustomPaint(
+          painter: _BlueprintGridPainter(
+            glowOpacity: glowOpacity,
+            shimmerProgress: _shimmerController.value,
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+}
+
+/// Custom painter that renders the animated blueprint grid
+class _BlueprintGridPainter extends CustomPainter {
+  final double glowOpacity;
+  final double shimmerProgress;
+
+  const _BlueprintGridPainter({
+    required this.glowOpacity,
+    required this.shimmerProgress,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Early exit if size is invalid
+    if (size.width <= 0 || size.height <= 0) return;
+
+    // ========================================================================
+    // BACKGROUND: Blueprint gradient
+    // ========================================================================
+    final Rect rect = Offset.zero & size;
+    final Paint background = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF0A1A2F), Color(0xFF09203F)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(rect);
+    canvas.drawRect(rect, background);
+
+    // ========================================================================
+    // GRID LINES: Adaptive spacing with animated glow
+    // ========================================================================
+    final double targetCells = 25.0;
+    final double spacingX = size.width / targetCells;
+    final double spacingY = size.height / targetCells;
+    final double spacing = (spacingX < spacingY ? spacingX : spacingY).clamp(20.0, 80.0);
+    
+    // Animated grid paint with breathing glow
+    final Paint gridPaint = Paint()
+      ..color = Colors.cyanAccent.withValues(alpha: glowOpacity)
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke;
+    
+    // Draw vertical lines
+    for (double x = 0; x < size.width; x += spacing) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        gridPaint,
+      );
+    }
+    
+    // Draw horizontal lines
+    for (double y = 0; y < size.height; y += spacing) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
+    }
+
+    // ========================================================================
+    // ACCENT LINES: Brighter major grid lines with enhanced glow
+    // ========================================================================
+    // Major lines pulse slightly brighter than minor lines
+    final double majorGlowBoost = glowOpacity * 2.5;
+    final Paint accentPaint = Paint()
+      ..color = Colors.cyanAccent.withValues(alpha: majorGlowBoost.clamp(0.0, 0.35))
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    
+    // Major vertical lines
+    for (double x = 0; x < size.width; x += spacing * 5) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        accentPaint,
+      );
+    }
+    
+    // Major horizontal lines
+    for (double y = 0; y < size.height; y += spacing * 5) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        accentPaint,
+      );
+    }
+
+    // ========================================================================
+    // SHIMMER EFFECT: Subtle diagonal sweep for depth
+    // ========================================================================
+    _drawShimmer(canvas, size);
+
+    // ========================================================================
+    // CORNER MARKERS: Blueprint-style corner indicators with subtle pulse
+    // ========================================================================
+    final double cornerOpacity = (glowOpacity * 3.5).clamp(0.0, 0.45);
+    final Paint cornerPaint = Paint()
+      ..color = Colors.cyanAccent.withValues(alpha: cornerOpacity)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+    
+    const double cornerSize = 20.0;
+    
+    // Top-left corner
+    canvas.drawLine(Offset.zero, const Offset(cornerSize, 0), cornerPaint);
+    canvas.drawLine(Offset.zero, const Offset(0, cornerSize), cornerPaint);
+    
+    // Top-right corner
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width - cornerSize, 0),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width, cornerSize),
+      cornerPaint,
+    );
+    
+    // Bottom-left corner
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(cornerSize, size.height),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(0, size.height - cornerSize),
+      cornerPaint,
+    );
+    
+    // Bottom-right corner
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width - cornerSize, size.height),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width, size.height - cornerSize),
+      cornerPaint,
+    );
+  }
+
+  /// Draw subtle shimmer effect - diagonal gradient sweep
+  void _drawShimmer(Canvas canvas, Size size) {
+    // Calculate shimmer position (moves diagonally across screen)
+    final double diagonalLength = size.width + size.height;
+    final double shimmerPosition = shimmerProgress * diagonalLength * 1.5 - diagonalLength * 0.25;
+    
+    // Create diagonal gradient that sweeps across
+    final Paint shimmerPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(shimmerPosition - 200, 0),
+        Offset(shimmerPosition + 200, 0),
+        [
+          Colors.cyanAccent.withValues(alpha: 0.0),
+          Colors.cyanAccent.withValues(alpha: 0.02), // Very subtle
+          Colors.cyanAccent.withValues(alpha: 0.0),
+        ],
+        [0.0, 0.5, 1.0],
+        TileMode.clamp,
+        Matrix4.rotationZ(-0.785398).storage, // -45 degrees in radians
+      )
+      ..blendMode = BlendMode.plus; // Additive blend for glow effect
+    
+    // Only draw shimmer when it's actually visible on screen
+    if (shimmerPosition > -300 && shimmerPosition < size.width + 300) {
+      canvas.drawRect(Offset.zero & size, shimmerPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BlueprintGridPainter oldDelegate) {
+    return oldDelegate.glowOpacity != glowOpacity ||
+        oldDelegate.shimmerProgress != shimmerProgress;
+  }
+}

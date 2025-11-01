@@ -1,0 +1,644 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'theme_manager.dart';
+
+/// SettingsDialog: Popup dialog for canvas settings
+class SettingsDialog extends StatefulWidget {
+  final ThemeManager themeManager;
+  final double currentGridSpacing;
+  final bool currentGridVisible;
+  final bool currentSnapToGrid;
+  final ValueChanged<double> onGridSpacingChanged;
+  final ValueChanged<bool> onGridVisibilityChanged;
+  final ValueChanged<bool> onSnapToGridChanged;
+  final VoidCallback onResetView;
+
+  const SettingsDialog({
+    super.key,
+    required this.themeManager,
+    required this.currentGridSpacing,
+    required this.currentGridVisible,
+    required this.currentSnapToGrid,
+    required this.onGridSpacingChanged,
+    required this.onGridVisibilityChanged,
+    required this.onSnapToGridChanged,
+    required this.onResetView,
+  });
+
+  @override
+  State<SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<SettingsDialog> {
+  late double _gridSpacing;
+  late bool _gridVisible;
+  late bool _snapToGrid;
+
+  @override
+  void initState() {
+    super.initState();
+    _gridSpacing = widget.currentGridSpacing;
+    _gridVisible = widget.currentGridVisible;
+    _snapToGrid = widget.currentSnapToGrid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.themeManager,
+      builder: (context, _) {
+        final theme = widget.themeManager.currentTheme;
+
+        return Dialog(
+          backgroundColor: theme.panelColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: theme.borderColor.withValues(alpha: 0.5),
+              width: 2,
+            ),
+          ),
+          child: Container(
+            width: 500,
+            constraints: const BoxConstraints(maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.backgroundColor.withValues(alpha: 0.3),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(14),
+                      topRight: Radius.circular(14),
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.borderColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: theme.accentColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.settings,
+                          color: theme.accentColor,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Canvas Settings',
+                              style: TextStyle(
+                                color: theme.textColor,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Configure canvas appearance and behavior',
+                              style: TextStyle(
+                                color: theme.textColor.withValues(alpha: 0.6),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: theme.textColor.withValues(alpha: 0.7),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Theme Section
+                        _buildSectionHeader('Theme', theme, Icons.palette),
+                        const SizedBox(height: 12),
+                        _buildThemeSelector(theme),
+                        const SizedBox(height: 24),
+
+                        // Canvas Controls Section
+                        _buildSectionHeader('Canvas Controls', theme, Icons.grid_on),
+                        const SizedBox(height: 12),
+                        _buildCanvasControls(theme),
+                        const SizedBox(height: 24),
+
+                        // Animation Settings Section
+                        _buildSectionHeader('Animation Effects', theme, Icons.auto_awesome),
+                        const SizedBox(height: 12),
+                        _buildAnimationControls(theme),
+                        const SizedBox(height: 24),
+
+                        // Quick Actions Section
+                        _buildSectionHeader('Quick Actions', theme, Icons.flash_on),
+                        const SizedBox(height: 12),
+                        _buildQuickActions(theme),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.backgroundColor.withValues(alpha: 0.3),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(14),
+                      bottomRight: Radius.circular(14),
+                    ),
+                    border: Border(
+                      top: BorderSide(
+                        color: theme.borderColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          // Reset to initial values
+                          setState(() {
+                            _gridSpacing = widget.currentGridSpacing;
+                            _gridVisible = widget.currentGridVisible;
+                            _snapToGrid = widget.currentSnapToGrid;
+                          });
+                        },
+                        child: Text(
+                          'Reset',
+                          style: TextStyle(color: theme.textColor.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () {
+                          // Apply changes
+                          widget.onGridSpacingChanged(_gridSpacing);
+                          widget.onGridVisibilityChanged(_gridVisible);
+                          widget.onSnapToGridChanged(_snapToGrid);
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.accentColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionHeader(String title, CanvasTheme theme, IconData icon) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: theme.accentColor,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            color: theme.textColor.withValues(alpha: 0.7),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Divider(
+            color: theme.borderColor.withValues(alpha: 0.2),
+            thickness: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeSelector(CanvasTheme theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.backgroundColor.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.borderColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: CanvasTheme.allThemes.map((t) {
+          final isSelected = t.name == theme.name;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => widget.themeManager.setTheme(t),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? theme.accentColor.withValues(alpha: 0.15)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: t.accentColor,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            t.name,
+                            style: TextStyle(
+                              color: theme.textColor,
+                              fontSize: 15,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                          Text(
+                            _getThemeDescription(t.name),
+                            style: TextStyle(
+                              color: theme.textColor.withValues(alpha: 0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_circle,
+                        color: theme.accentColor,
+                        size: 20,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  String _getThemeDescription(String themeName) {
+    switch (themeName) {
+      case 'Blueprint Blue':
+        return 'Classic technical drawing style';
+      case 'Dark Neon':
+        return 'Cyberpunk high contrast';
+      case 'Whiteboard Minimal':
+        return 'Clean professional look';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildCanvasControls(CanvasTheme theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.backgroundColor.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.borderColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Grid Visibility
+          _buildToggle(
+            'Show Grid',
+            _gridVisible,
+            (value) => setState(() => _gridVisible = value),
+            theme,
+            Icons.grid_4x4,
+          ),
+          const SizedBox(height: 16),
+
+          // Snap to Grid
+          _buildToggle(
+            'Snap to Grid',
+            _snapToGrid,
+            (value) => setState(() => _snapToGrid = value),
+            theme,
+            Icons.grid_3x3,
+          ),
+          const SizedBox(height: 20),
+
+          // Grid Spacing
+          _buildSlider(
+            'Grid Spacing',
+            _gridSpacing,
+            25,
+            200,
+            7,
+            (value) => setState(() => _gridSpacing = value),
+            theme,
+            unit: 'px',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimationControls(CanvasTheme theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.backgroundColor.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.borderColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Enable Animations Toggle
+          Row(
+            children: [
+              Icon(
+                Icons.animation,
+                color: theme.accentColor.withValues(alpha: 0.6),
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Enable Animations',
+                  style: TextStyle(
+                    color: theme.textColor.withValues(alpha: 0.8),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Switch(
+                value: widget.themeManager.animationsEnabled,
+                onChanged: (value) => widget.themeManager.setAnimationsEnabled(value),
+                activeColor: theme.accentColor,
+                activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Grid Pulse Intensity
+          _buildPercentageSlider(
+            'Grid Pulse Intensity',
+            widget.themeManager.gridPulseIntensity,
+            (value) => widget.themeManager.setGridPulseIntensity(value),
+            theme,
+            enabled: widget.themeManager.animationsEnabled,
+          ),
+          const SizedBox(height: 16),
+
+          // Radar Sweep Intensity
+          _buildPercentageSlider(
+            'Radar Sweep Intensity',
+            widget.themeManager.radarSweepIntensity,
+            (value) => widget.themeManager.setRadarSweepIntensity(value),
+            theme,
+            enabled: widget.themeManager.animationsEnabled,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(CanvasTheme theme) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              widget.onResetView();
+              Navigator.of(context).pop();
+            },
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('Reset View'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.accentColor.withValues(alpha: 0.15),
+              foregroundColor: theme.accentColor,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color: theme.accentColor.withValues(alpha: 0.3),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToggle(
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged,
+    CanvasTheme theme,
+    IconData icon,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, color: theme.accentColor.withValues(alpha: 0.6), size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: theme.textColor.withValues(alpha: 0.8),
+              fontSize: 14,
+            ),
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: theme.accentColor,
+          activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlider(
+    String label,
+    double value,
+    double min,
+    double max,
+    int? divisions,
+    ValueChanged<double> onChanged,
+    CanvasTheme theme, {
+    String unit = '',
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: theme.textColor.withValues(alpha: 0.8),
+                fontSize: 14,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${value.toInt()}$unit',
+                style: TextStyle(
+                  color: theme.accentColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: theme.accentColor,
+            inactiveTrackColor: theme.accentColor.withValues(alpha: 0.2),
+            thumbColor: theme.accentColor,
+            overlayColor: theme.accentColor.withValues(alpha: 0.2),
+            trackHeight: 4,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+          ),
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPercentageSlider(
+    String label,
+    double value,
+    ValueChanged<double> onChanged,
+    CanvasTheme theme, {
+    bool enabled = true,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.4,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: theme.textColor.withValues(alpha: 0.8),
+                  fontSize: 14,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${(value * 100).toInt()}%',
+                  style: TextStyle(
+                    color: theme.accentColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: theme.accentColor,
+              inactiveTrackColor: theme.accentColor.withValues(alpha: 0.2),
+              thumbColor: theme.accentColor,
+              overlayColor: theme.accentColor.withValues(alpha: 0.2),
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              disabledActiveTrackColor: theme.accentColor.withValues(alpha: 0.3),
+              disabledInactiveTrackColor: theme.accentColor.withValues(alpha: 0.1),
+              disabledThumbColor: theme.accentColor.withValues(alpha: 0.3),
+            ),
+            child: Slider(
+              value: value,
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
