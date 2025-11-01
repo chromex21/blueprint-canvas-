@@ -1,15 +1,34 @@
-# dark_canvas_core
+# Blueprint Canvas Tool
 
-A new Flutter project.
+A Flutter-based canvas application for creating and managing interactive node-based diagrams and blueprints.
+
+## Features
+
+- Interactive canvas with pan and zoom
+- Node creation and editing
+- Node connections with visual feedback
+- Multiple node types (Input, Processing, Output)
+- Dark/Light theme support
+- Grid overlay system
+- Real-time canvas updates
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+This project is a starting point for a Flutter application focused on canvas-based node editing.
 
-A few resources to get you started if this is your first Flutter project:
+### Prerequisites
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Flutter SDK (latest stable version)
+- Dart SDK
+- IDE (VS Code, Android Studio, etc.)
+
+### Installation
+
+1. Clone the repository
+2. Run `flutter pub get` to install dependencies
+3. Run `flutter run` to start the application
+
+## Documentation
 
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
