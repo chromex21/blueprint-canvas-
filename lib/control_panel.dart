@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'theme_manager.dart';
 
 /// ControlPanel: Side-mounted control interface for canvas settings
@@ -416,7 +415,7 @@ class _ControlPanelState extends State<ControlPanel> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: theme.accentColor,
+          activeThumbColor: theme.accentColor,
           activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
         ),
       ],

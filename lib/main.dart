@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme_manager.dart';
-import 'canvas_layout.dart';
+import 'enhanced_canvas_layout.dart';
 
 void main() {
   runApp(const DarkCanvasApp());
@@ -51,7 +51,7 @@ class _DarkCanvasAppState extends State<DarkCanvasApp> {
                   : Brightness.dark,
             ),
           ),
-          home: CanvasLayout(themeManager: _themeManager),
+          home: EnhancedCanvasLayout(themeManager: _themeManager),
         );
       },
     );

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'theme_manager.dart';
 
 /// SettingsDialog: Popup dialog for canvas settings
@@ -424,7 +423,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               Switch(
                 value: widget.themeManager.animationsEnabled,
                 onChanged: (value) => widget.themeManager.setAnimationsEnabled(value),
-                activeColor: theme.accentColor,
+                activeThumbColor: theme.accentColor,
                 activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
               ),
             ],
@@ -506,7 +505,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: theme.accentColor,
+          activeThumbColor: theme.accentColor,
           activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
         ),
       ],

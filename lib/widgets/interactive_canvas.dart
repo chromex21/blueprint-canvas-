@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/canvas_node.dart';
-import '../models/node_connection.dart';
 import '../managers/node_manager.dart';
 import '../painters/node_painter.dart';
 import '../painters/connection_painter.dart';
