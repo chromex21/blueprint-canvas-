@@ -8,6 +8,7 @@ class ToolbarButton extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
   final Color accentColor;
+  final Color? customColor; // For special buttons like Save & Exit
 
   const ToolbarButton({
     super.key,
@@ -16,10 +17,13 @@ class ToolbarButton extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     required this.accentColor,
+    this.customColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final buttonColor = customColor ?? accentColor;
+
     return Tooltip(
       message: label,
       child: Material(
@@ -31,19 +35,21 @@ class ToolbarButton extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: isActive
-                  ? accentColor.withValues(alpha: 0.2)
+                  ? buttonColor.withValues(alpha: 0.2)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isActive
-                    ? accentColor.withValues(alpha: 0.5)
-                    : accentColor.withValues(alpha: 0.1),
+                    ? buttonColor.withValues(alpha: 0.5)
+                    : buttonColor.withValues(alpha: 0.1),
                 width: isActive ? 2 : 1,
               ),
             ),
             child: Icon(
               icon,
-              color: isActive ? accentColor : accentColor.withValues(alpha: 0.6),
+              color: isActive
+                  ? buttonColor
+                  : buttonColor.withValues(alpha: 0.6),
               size: 20,
             ),
           ),
@@ -58,6 +64,8 @@ class QuickActionsToolbar extends StatefulWidget {
   final ThemeManager themeManager;
   final VoidCallback onSettingsTap;
   final VoidCallback onShapesTool;
+  final VoidCallback onMediaTool;
+  final VoidCallback? onSaveAndExit; // Optional save & exit callback
   final ValueChanged<CanvasTool> onToolChanged;
   final CanvasTool activeTool;
 
@@ -66,8 +74,10 @@ class QuickActionsToolbar extends StatefulWidget {
     required this.themeManager,
     required this.onSettingsTap,
     required this.onShapesTool,
+    required this.onMediaTool,
     required this.onToolChanged,
     required this.activeTool,
+    this.onSaveAndExit,
   });
 
   @override
@@ -87,9 +97,7 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
           decoration: BoxDecoration(
             color: theme.backgroundColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.borderColor.withValues(alpha: 0.2),
-            ),
+            border: Border.all(color: theme.borderColor.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +129,18 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  // Select/Cursor tool
+                  // Save & Exit button (if callback provided)
+                  if (widget.onSaveAndExit != null)
+                    ToolbarButton(
+                      icon: Icons.exit_to_app,
+                      label: 'Save & Exit',
+                      isActive: false,
+                      onTap: widget.onSaveAndExit!,
+                      accentColor: theme.accentColor,
+                      customColor: Colors.green,
+                    ),
+
+                  // Select/Move tool
                   ToolbarButton(
                     icon: Icons.near_me,
                     label: 'Select',
@@ -130,37 +149,10 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
                     accentColor: theme.accentColor,
                   ),
 
-                  // Node creation
+                  // Add Shapes tool (opens shape selection)
                   ToolbarButton(
-                    icon: Icons.add_circle_outline,
-                    label: 'Add Node',
-                    isActive: widget.activeTool == CanvasTool.node,
-                    onTap: () => widget.onToolChanged(CanvasTool.node),
-                    accentColor: theme.accentColor,
-                  ),
-
-                  // Text tool
-                  ToolbarButton(
-                    icon: Icons.text_fields,
-                    label: 'Text',
-                    isActive: widget.activeTool == CanvasTool.text,
-                    onTap: () => widget.onToolChanged(CanvasTool.text),
-                    accentColor: theme.accentColor,
-                  ),
-
-                  // Connector/Line tool
-                  ToolbarButton(
-                    icon: Icons.timeline,
-                    label: 'Connector',
-                    isActive: widget.activeTool == CanvasTool.connector,
-                    onTap: () => widget.onToolChanged(CanvasTool.connector),
-                    accentColor: theme.accentColor,
-                  ),
-
-                  // Shapes tool (opens slide-out)
-                  ToolbarButton(
-                    icon: Icons.category_outlined,
-                    label: 'Shapes',
+                    icon: Icons.shape_line_outlined,
+                    label: 'Add Shapes',
                     isActive: widget.activeTool == CanvasTool.shapes,
                     onTap: () {
                       widget.onToolChanged(CanvasTool.shapes);
@@ -169,21 +161,54 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
                     accentColor: theme.accentColor,
                   ),
 
-                  // Eraser tool
+                  // Media import tool (emoji stickers + PNG/SVG files)
                   ToolbarButton(
-                    icon: Icons.auto_fix_off,
-                    label: 'Eraser',
+                    icon: Icons.image_outlined,
+                    label: 'Media',
+                    isActive: widget.activeTool == CanvasTool.media,
+                    onTap: () {
+                      widget.onToolChanged(CanvasTool.media);
+                      widget.onMediaTool();
+                    },
+                    accentColor: theme.accentColor,
+                  ),
+
+                  // Pan tool (for manually panning the canvas)
+                  ToolbarButton(
+                    icon: Icons.pan_tool,
+                    label: 'Pan',
+                    isActive: widget.activeTool == CanvasTool.pan,
+                    onTap: () => widget.onToolChanged(CanvasTool.pan),
+                    accentColor: theme.accentColor,
+                  ),
+
+                  // Text Editor tool
+                  ToolbarButton(
+                    icon: Icons.edit_note,
+                    label: 'Edit Text',
+                    isActive: widget.activeTool == CanvasTool.editor,
+                    onTap: () => widget.onToolChanged(CanvasTool.editor),
+                    accentColor: theme.accentColor,
+                  ),
+
+                  // Eraser/Delete tool
+                  ToolbarButton(
+                    icon: Icons.delete_outline,
+                    label: 'Erase',
                     isActive: widget.activeTool == CanvasTool.eraser,
                     onTap: () => widget.onToolChanged(CanvasTool.eraser),
                     accentColor: theme.accentColor,
                   ),
 
-                  // Settings button
+                  // Settings button (optional)
                   ToolbarButton(
                     icon: Icons.settings,
                     label: 'Settings',
-                    isActive: false,
-                    onTap: widget.onSettingsTap,
+                    isActive: widget.activeTool == CanvasTool.settings,
+                    onTap: () {
+                      widget.onToolChanged(CanvasTool.settings);
+                      widget.onSettingsTap();
+                    },
                     accentColor: theme.accentColor,
                   ),
                 ],
@@ -193,7 +218,10 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
               if (widget.activeTool != CanvasTool.select) ...[
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.accentColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -228,13 +256,18 @@ class _QuickActionsToolbarState extends State<QuickActionsToolbar> {
 }
 
 /// CanvasTool enum for tracking active tool
+/// SIMPLIFIED: Only essential tools (select, pan, shapes, eraser, editor, settings, media)
 enum CanvasTool {
-  select,
-  node,
-  text,
-  connector,
-  shapes,
-  eraser,
+  select, // Select/Move tool
+  pan, // Pan tool (manually pan canvas)
+  shapes, // Add Shapes tool
+  node, // Node creation (compatibility)
+  text, // Text tool (compatibility)
+  connector, // Connector tool (compatibility)
+  eraser, // Erase/Delete tool
+  editor, // Text Editor tool (for editing shape text)
+  media, // Media import tool (emoji stickers + PNG/SVG files)
+  settings, // Settings tool (optional)
 }
 
 extension CanvasToolExtension on CanvasTool {
@@ -242,16 +275,24 @@ extension CanvasToolExtension on CanvasTool {
     switch (this) {
       case CanvasTool.select:
         return 'Select';
+      case CanvasTool.pan:
+        return 'Pan';
+      case CanvasTool.shapes:
+        return 'Shapes';
       case CanvasTool.node:
         return 'Node';
       case CanvasTool.text:
         return 'Text';
       case CanvasTool.connector:
         return 'Connector';
-      case CanvasTool.shapes:
-        return 'Shapes';
+      case CanvasTool.editor:
+        return 'Editor';
       case CanvasTool.eraser:
         return 'Eraser';
+      case CanvasTool.media:
+        return 'Media';
+      case CanvasTool.settings:
+        return 'Settings';
     }
   }
 }

@@ -17,14 +17,18 @@ class ViewportController extends ChangeNotifier {
   Offset _translation = Offset.zero;
   double _scale = 1.0;
 
-  // Constraints
-  static const double minScale = 0.1;
-  static const double maxScale = 5.0;
+  // Constraints - Updated: max 300% (3.0), min 50% (0.5) for clear visibility
+  static const double minScale = 0.5;
+  static const double maxScale = 3.0;
   static const double maxTranslation = 50000.0; // Virtually infinite
 
   // Animation support
   AnimationController? _animationController;
   Animation<Matrix4>? _transformAnimation;
+
+  // Pan limit feedback
+  bool _isAtPanLimit = false;
+  bool get isAtPanLimit => _isAtPanLimit;
 
   // Getters
   Matrix4 get transform => Matrix4.copy(_transform);
@@ -83,25 +87,33 @@ class ViewportController extends ChangeNotifier {
   // TRANSFORMATION OPERATIONS
   // ============================================================================
 
-  /// Zoom in/out centered on a specific point
+  /// Zoom in/out centered on a specific point (cursor position)
+  /// This ensures the point under the cursor stays fixed during zoom
   void zoomAt(Offset focalPoint, double deltaScale, Size canvasSize) {
+    if (canvasSize.isEmpty) return;
+    
     final double newScale = (_scale * deltaScale).clamp(minScale, maxScale);
-
     if (newScale == _scale) return; // No change needed
 
-    // Convert focal point to world coordinates before scaling
-    final worldFocal = screenToWorld(focalPoint, canvasSize);
+    // Get the world coordinates of the point under the cursor BEFORE changing scale
+    // Current transform: screen = translation + world * scale
+    // So: world = (screen - translation) / scale
+    final oldScale = _scale;
+    final oldTranslation = _translation;
+    
+    // Calculate world coordinates using current transform
+    final worldX = (focalPoint.dx - oldTranslation.dx) / oldScale;
+    final worldY = (focalPoint.dy - oldTranslation.dy) / oldScale;
 
     // Update scale
     _scale = newScale;
 
-    // Adjust translation to keep focal point in same screen position
-    final newScreenFocal = worldToScreen(worldFocal, canvasSize);
-    final offset = focalPoint - newScreenFocal;
-
+    // Calculate new translation so the same world point appears at the same screen position
+    // We want: focalPoint = newTranslation + world * newScale
+    // So: newTranslation = focalPoint - world * newScale
     _translation = Offset(
-      (_translation.dx + offset.dx).clamp(-maxTranslation, maxTranslation),
-      (_translation.dy + offset.dy).clamp(-maxTranslation, maxTranslation),
+      (focalPoint.dx - worldX * newScale).clamp(-maxTranslation, maxTranslation),
+      (focalPoint.dy - worldY * newScale).clamp(-maxTranslation, maxTranslation),
     );
 
     _updateTransform(canvasSize);
@@ -110,10 +122,32 @@ class ViewportController extends ChangeNotifier {
 
   /// Pan the viewport by a delta amount
   void pan(Offset delta) {
-    _translation = Offset(
-      (_translation.dx + delta.dx).clamp(-maxTranslation, maxTranslation),
-      (_translation.dy + delta.dy).clamp(-maxTranslation, maxTranslation),
-    );
+    final newDx = _translation.dx + delta.dx;
+    final newDy = _translation.dy + delta.dy;
+    
+    final clampedDx = newDx.clamp(-maxTranslation, maxTranslation);
+    final clampedDy = newDy.clamp(-maxTranslation, maxTranslation);
+    
+    // Check if we hit a pan limit
+    final hitLimit = (newDx != clampedDx) || (newDy != clampedDy);
+    
+    _translation = Offset(clampedDx, clampedDy);
+    
+    // Update pan limit state
+    if (hitLimit != _isAtPanLimit) {
+      _isAtPanLimit = hitLimit;
+      notifyListeners();
+      
+      // Auto-reset after brief flash (300ms)
+      if (_isAtPanLimit) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (_isAtPanLimit) {
+            _isAtPanLimit = false;
+            notifyListeners();
+          }
+        });
+      }
+    }
 
     _updateTransform(Size.zero); // Size not needed for translation-only updates
     notifyListeners();
@@ -246,10 +280,29 @@ class ViewportController extends ChangeNotifier {
   // ============================================================================
 
   /// Build the complete transformation matrix
+  /// Formula: screen = translation + world * scale
+  /// 
+  /// For 2D affine transform: screen.x = world.x * scale + translation.x
+  ///                          screen.y = world.y * scale + translation.y
+  /// 
+  /// Matrix format (homogeneous coordinates):
+  /// [scale   0       translation.x]
+  /// [0       scale   translation.y]
+  /// [0       0       1           ]
   Matrix4 _buildTransformMatrix(Size canvasSize) {
-    return Matrix4.identity()
-      ..translate(_translation.dx, _translation.dy)
-      ..scale(_scale, _scale);
+    // Build matrix directly to ensure correct format
+    // Matrix4 uses column-major order: [m00 m10 m20 m30]
+    //                                  [m01 m11 m21 m31]
+    //                                  [m02 m12 m22 m32]
+    //                                  [m03 m13 m23 m33]
+    // 
+    // For 2D transform: m00=scale, m11=scale, m03=tx, m13=ty
+    final matrix = Matrix4.identity();
+    matrix.setEntry(0, 0, _scale);      // m00: scale x
+    matrix.setEntry(1, 1, _scale);      // m11: scale y
+    matrix.setEntry(0, 3, _translation.dx);  // m03: translate x
+    matrix.setEntry(1, 3, _translation.dy);  // m13: translate y
+    return matrix;
   }
 
   /// Update the internal transform matrix

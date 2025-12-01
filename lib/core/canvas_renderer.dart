@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/canvas_node.dart';
 import '../managers/node_manager.dart';
+import '../managers/node_manager_optimized.dart';
 import '../painters/node_painter.dart';
 import '../painters/connection_painter.dart';
 import '../theme_manager.dart';
 import '../quick_actions_toolbar.dart';
 import 'viewport_controller.dart';
 import 'canvas_interaction_manager.dart';
+import 'performance_manager.dart';
 
-/// CanvasRenderer: Handles all canvas rendering operations
+/// CanvasRenderer: Handles all canvas rendering operations with advanced performance optimization
 ///
 /// Responsibilities:
 /// - Coordinate transforms for rendering
 /// - Layer-based rendering (background, connections, nodes, overlays)
-/// - Viewport culling for performance
+/// - Advanced viewport culling with spatial indexing
+/// - Level-of-detail (LOD) rendering based on zoom
+/// - Object pooling and render caching
 /// - Selection and interaction visual feedback
 /// - Accessibility rendering support
 class CanvasRenderer extends CustomPainter {
@@ -23,6 +27,9 @@ class CanvasRenderer extends CustomPainter {
   final ViewportController viewportController;
   final Size canvasSize;
 
+  // Performance optimization
+  static final PerformanceManager _performanceManager = PerformanceManager();
+
   // Interaction visuals
   final Offset? connectionStart;
   final Offset? currentPointer;
@@ -30,6 +37,7 @@ class CanvasRenderer extends CustomPainter {
 
   // Accessibility
   final bool showAccessibilityOverlay;
+  final bool showPerformanceMetrics;
 
   const CanvasRenderer({
     required this.theme,
@@ -40,6 +48,7 @@ class CanvasRenderer extends CustomPainter {
     this.currentPointer,
     this.selectionBoxBounds,
     this.showAccessibilityOverlay = false,
+    this.showPerformanceMetrics = false,
   });
 
   @override
@@ -50,17 +59,29 @@ class CanvasRenderer extends CustomPainter {
     canvas.save();
     canvas.transform(viewportController.transform.storage);
 
-    // Get visible bounds for culling
-    final visibleBounds = viewportController.getVisibleWorldRect(size);
+    // Get visible bounds for advanced culling
+    final visibleBounds = viewportController.getViewportBounds(size);
 
-    // 1. Draw connections first (behind nodes)
-    _drawConnections(canvas, size, visibleBounds);
+    // OPTIMIZATION: Use spatial indexing if available (NodeManagerOptimized)
+    // This is much faster than PerformanceManager's culling for large node counts
+    final visibleNodes = nodeManager is NodeManagerOptimized
+        ? (nodeManager as NodeManagerOptimized).getNodesInViewport(
+            visibleBounds,
+          )
+        : _performanceManager.cullVisibleNodes(
+            nodeManager.nodes,
+            visibleBounds,
+            viewportController,
+          );
+
+    // 1. Draw connections first (behind nodes) - with performance optimization
+    _drawConnectionsOptimized(canvas, size, visibleBounds, visibleNodes);
 
     // 2. Draw temporary connection line (while creating)
     _drawTemporaryConnection(canvas, size);
 
-    // 3. Draw nodes on top
-    _drawNodes(canvas, size, visibleBounds);
+    // 3. Draw nodes with LOD and caching
+    _drawNodesOptimized(canvas, size, visibleNodes);
 
     canvas.restore();
 
@@ -71,34 +92,162 @@ class CanvasRenderer extends CustomPainter {
     if (showAccessibilityOverlay) {
       _drawAccessibilityOverlay(canvas, size);
     }
+
+    // 6. Draw performance metrics if enabled
+    if (showPerformanceMetrics) {
+      _drawPerformanceMetrics(canvas, size);
+    }
   }
 
   // ============================================================================
-  // LAYER RENDERING METHODS
+  // OPTIMIZED RENDERING METHODS
   // ============================================================================
 
-  void _drawConnections(Canvas canvas, Size size, Rect visibleBounds) {
+  void _drawConnectionsOptimized(
+    Canvas canvas,
+    Size size,
+    Rect visibleBounds,
+    List<CanvasNode> visibleNodes,
+  ) {
     if (nodeManager.connections.isEmpty) return;
 
-    // Filter connections that might be visible
+    // Create a set of visible node IDs for fast lookup
+    final visibleNodeIds = visibleNodes.map((node) => node.id).toSet();
+
+    // Filter connections that connect visible nodes
     final visibleConnections = nodeManager.connections.where((connection) {
-      final sourceNode = nodeManager.getNode(connection.sourceNodeId);
-      final targetNode = nodeManager.getNode(connection.targetNodeId);
-
-      if (sourceNode == null || targetNode == null) return false;
-
-      // Simple bounds check - if either node is visible, connection might be visible
-      return _isNodeVisible(sourceNode, visibleBounds) ||
-          _isNodeVisible(targetNode, visibleBounds);
+      return visibleNodeIds.contains(connection.sourceNodeId) ||
+          visibleNodeIds.contains(connection.targetNodeId);
     }).toList();
 
     if (visibleConnections.isNotEmpty) {
+      // OPTIMIZATION: Use Map for O(1) node lookup instead of O(n) firstWhere
+      // Create node map for O(1) lookups (built once per frame)
+      final nodeMap = <String, CanvasNode>{
+        for (final node in nodeManager.nodes) node.id: node,
+      };
+
       final connectionPainter = ConnectionPainter(
         connections: visibleConnections,
-        nodes: nodeManager.nodes,
+        nodeMap: nodeMap,
         theme: theme,
       );
       connectionPainter.paint(canvas, size);
+    }
+  }
+
+  void _drawNodesOptimized(
+    Canvas canvas,
+    Size size,
+    List<CanvasNode> visibleNodes,
+  ) {
+    if (visibleNodes.isEmpty) return;
+
+    final currentLOD = _performanceManager.getCurrentLOD();
+
+    // Render based on LOD level
+    switch (currentLOD) {
+      case LODLevel.minimal:
+        _drawNodesMinimal(canvas, visibleNodes);
+        break;
+      case LODLevel.simplified:
+        _drawNodesSimplified(canvas, visibleNodes);
+        break;
+      case LODLevel.full:
+        _drawNodesFull(canvas, size, visibleNodes);
+        break;
+    }
+  }
+
+  void _drawNodesMinimal(Canvas canvas, List<CanvasNode> nodes) {
+    // Ultra-fast rendering - just colored rectangles
+    for (final node in nodes) {
+      final paint = _performanceManager.getPaint();
+
+      try {
+        paint.color = node.color;
+        paint.style = PaintingStyle.fill;
+
+        final rect = Rect.fromCenter(
+          center: node.position,
+          width: 20 / viewportController.scale, // Scale-adjusted size
+          height: 16 / viewportController.scale,
+        );
+
+        canvas.drawRect(rect, paint);
+      } finally {
+        _performanceManager.returnPaint(paint);
+      }
+    }
+  }
+
+  void _drawNodesSimplified(Canvas canvas, List<CanvasNode> nodes) {
+    // Simplified rendering - basic shapes without details
+    for (final node in nodes) {
+      final paint = _performanceManager.getPaint();
+
+      try {
+        paint.color = node.color;
+        paint.style = PaintingStyle.fill;
+
+        final size = Size(
+          40 / viewportController.scale,
+          32 / viewportController.scale,
+        );
+        final rect = Rect.fromCenter(
+          center: node.position,
+          width: size.width,
+          height: size.height,
+        );
+
+        // Simple shape based on type
+        switch (node.type) {
+          case NodeType.shapeCircle:
+            canvas.drawCircle(node.position, size.width / 2, paint);
+            break;
+          default:
+            canvas.drawRect(rect, paint);
+            break;
+        }
+      } finally {
+        _performanceManager.returnPaint(paint);
+      }
+    }
+  }
+
+  void _drawNodesFull(Canvas canvas, Size size, List<CanvasNode> nodes) {
+    // Full detail rendering using existing NodePainter
+    final nodePainter = NodePainter(nodes: nodes, theme: theme);
+    nodePainter.paint(canvas, size);
+  }
+
+  void _drawPerformanceMetrics(Canvas canvas, Size size) {
+    final metrics = _performanceManager.getMetrics();
+
+    final paint = _performanceManager.getPaint();
+    try {
+      paint.color = theme.textColor.withValues(alpha: 0.8);
+      paint.style = PaintingStyle.fill;
+
+      // Draw performance text in screen space (not transformed)
+      final textSpan = TextSpan(
+        text: metrics.toString(),
+        style: TextStyle(
+          color: theme.textColor,
+          fontSize: 12,
+          fontFamily: 'monospace',
+        ),
+      );
+
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+
+      textPainter.layout();
+      textPainter.paint(canvas, const Offset(10, 10));
+    } finally {
+      _performanceManager.returnPaint(paint);
     }
   }
 
@@ -112,7 +261,7 @@ class CanvasRenderer extends CustomPainter {
     );
 
     final paint = Paint()
-      ..color = theme.accentColor.withOpacity(0.6)
+      ..color = theme.accentColor.withValues(alpha: 0.6)
       ..strokeWidth =
           2 /
           viewportController
@@ -130,20 +279,6 @@ class CanvasRenderer extends CustomPainter {
     );
   }
 
-  void _drawNodes(Canvas canvas, Size size, Rect visibleBounds) {
-    if (nodeManager.nodes.isEmpty) return;
-
-    // Filter nodes to only render visible ones
-    final visibleNodes = nodeManager.nodes.where((node) {
-      return _isNodeVisible(node, visibleBounds);
-    }).toList();
-
-    if (visibleNodes.isNotEmpty) {
-      final nodePainter = NodePainter(nodes: visibleNodes, theme: theme);
-      nodePainter.paint(canvas, size);
-    }
-  }
-
   void _drawScreenSpaceOverlays(Canvas canvas, Size size) {
     // Draw selection box (screen space)
     if (selectionBoxBounds != null) {
@@ -156,7 +291,7 @@ class CanvasRenderer extends CustomPainter {
 
     // Fill
     final fillPaint = Paint()
-      ..color = theme.accentColor.withOpacity(0.1)
+      ..color = theme.accentColor.withValues(alpha: 0.1)
       ..style = PaintingStyle.fill;
     canvas.drawRect(selectionBoxBounds!, fillPaint);
 
@@ -171,13 +306,13 @@ class CanvasRenderer extends CustomPainter {
   void _drawAccessibilityOverlay(Canvas canvas, Size size) {
     // Draw accessibility indicators for screen readers
     final accessibilityPaint = Paint()
-      ..color = Colors.yellow.withOpacity(0.3)
+      ..color = Colors.yellow.withAlpha((0.3 * 255).round())
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
 
     // Highlight focusable elements
     for (final node in nodeManager.nodes) {
-      if (_isNodeVisible(node, viewportController.getVisibleWorldRect(size))) {
+      if (_isNodeVisible(node, viewportController.getViewportBounds(size))) {
         // Convert world node bounds to screen bounds
         final screenTopLeft = viewportController.worldToScreen(
           node.position,

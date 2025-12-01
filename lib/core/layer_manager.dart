@@ -58,10 +58,11 @@ class LayerManager extends ChangeNotifier {
   String? _activeLayerId;
   int _nextZOrder = 0;
 
-  LayerManager({required NodeManager nodeManager}) : _nodeManager = nodeManager {
+  LayerManager({required NodeManager nodeManager})
+    : _nodeManager = nodeManager {
     // Create default layer
     _createDefaultLayer();
-    
+
     // Listen to node changes
     _nodeManager.addListener(_onNodesChanged);
   }
@@ -101,7 +102,7 @@ class LayerManager extends ChangeNotifier {
   }) {
     final id = 'layer_${DateTime.now().microsecondsSinceEpoch}';
     final layerName = name ?? 'Layer ${_layers.length + 1}';
-    
+
     final layer = CanvasLayer(
       id: id,
       name: layerName,
@@ -122,7 +123,7 @@ class LayerManager extends ChangeNotifier {
   /// Delete a layer (moves nodes to default layer)
   bool deleteLayer(String layerId) {
     if (_layers.length <= 1) return false; // Can't delete last layer
-    
+
     final layer = getLayer(layerId);
     if (layer == null) return false;
 
@@ -137,12 +138,12 @@ class LayerManager extends ChangeNotifier {
 
     // Remove layer
     _layers.removeWhere((l) => l.id == layerId);
-    
+
     // Update active layer if needed
     if (_activeLayerId == layerId) {
       _activeLayerId = _layers.first.id;
     }
-    
+
     notifyListeners();
     return true;
   }
@@ -259,11 +260,11 @@ class LayerManager extends ChangeNotifier {
     // Find layer above this one
     final layersSorted = layersByZOrder;
     final currentIndex = layersSorted.indexWhere((l) => l.id == layerId);
-    
+
     if (currentIndex < layersSorted.length - 1) {
       final targetLayer = layersSorted[currentIndex + 1];
       final newZOrder = targetLayer.zOrder;
-      
+
       // Swap z-orders
       _updateLayer(layerId, layer.copyWith(zOrder: newZOrder));
       _updateLayer(targetLayer.id, targetLayer.copyWith(zOrder: layer.zOrder));
@@ -278,11 +279,11 @@ class LayerManager extends ChangeNotifier {
     // Find layer below this one
     final layersSorted = layersByZOrder;
     final currentIndex = layersSorted.indexWhere((l) => l.id == layerId);
-    
+
     if (currentIndex > 0) {
       final targetLayer = layersSorted[currentIndex - 1];
       final newZOrder = targetLayer.zOrder;
-      
+
       // Swap z-orders
       _updateLayer(layerId, layer.copyWith(zOrder: newZOrder));
       _updateLayer(targetLayer.id, targetLayer.copyWith(zOrder: layer.zOrder));
@@ -295,9 +296,10 @@ class LayerManager extends ChangeNotifier {
     if (layer == null) return;
 
     // Find minimum z-order and set this layer below it
-    final minZOrder = _layers.map((l) => l.zOrder).fold<int>(
-      _nextZOrder, (min, z) => z < min ? z : min);
-    
+    final minZOrder = _layers
+        .map((l) => l.zOrder)
+        .fold<int>(_nextZOrder, (min, z) => z < min ? z : min);
+
     _updateLayer(layerId, layer.copyWith(zOrder: minZOrder - 1));
   }
 
@@ -392,7 +394,7 @@ class LayerManager extends ChangeNotifier {
     // When nodes are added/removed, ensure they're in a layer
     final allNodeIds = _nodeManager.nodes.map((n) => n.id).toSet();
     final layerNodeIds = _layers.expand((l) => l.nodeIds).toSet();
-    
+
     // Add orphaned nodes to active layer
     final orphanedNodes = allNodeIds.difference(layerNodeIds);
     if (orphanedNodes.isNotEmpty && _activeLayerId != null) {
@@ -404,7 +406,7 @@ class LayerManager extends ChangeNotifier {
         _updateLayer(_activeLayerId!, updatedLayer);
       }
     }
-    
+
     // Remove deleted nodes from layers
     final deletedNodes = layerNodeIds.difference(allNodeIds);
     for (final nodeId in deletedNodes) {

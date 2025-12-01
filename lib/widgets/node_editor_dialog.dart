@@ -25,7 +25,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
     super.initState();
     _controller = TextEditingController(text: widget.initialContent);
     _focusNode = FocusNode();
-    
+
     // Auto-focus the text field
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -58,7 +58,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: widget.theme.borderColor.withOpacity(0.3),
+          color: widget.theme.borderColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -75,7 +75,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: widget.theme.accentColor.withOpacity(0.1),
+                    color: widget.theme.accentColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -98,7 +98,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                 IconButton(
                   icon: Icon(
                     Icons.close,
-                    color: widget.theme.textColor.withOpacity(0.6),
+                    color: widget.theme.textColor.withValues(alpha: 0.6),
                   ),
                   onPressed: _cancel,
                 ),
@@ -106,32 +106,35 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
             ),
             const SizedBox(height: 20),
 
-            // Text Field
+            // Text Field with character limit
             TextField(
               controller: _controller,
               focusNode: _focusNode,
               maxLines: 5,
-              style: TextStyle(
-                color: widget.theme.textColor,
-                fontSize: 14,
-              ),
+              maxLength: 100, // ✅ MASTER PROMPT: Enforce max character length
+              style: TextStyle(color: widget.theme.textColor, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Enter text content...',
+                hintText: 'Enter text content (max 100 characters)...',
                 hintStyle: TextStyle(
-                  color: widget.theme.textColor.withOpacity(0.4),
+                  color: widget.theme.textColor.withValues(alpha: 0.4),
+                ),
+                helperText: 'Text is limited to prevent overflow',
+                helperStyle: TextStyle(
+                  color: widget.theme.textColor.withValues(alpha: 0.5),
+                  fontSize: 11,
                 ),
                 filled: true,
-                fillColor: widget.theme.backgroundColor.withOpacity(0.3),
+                fillColor: widget.theme.backgroundColor.withValues(alpha: 0.3),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide(
-                    color: widget.theme.borderColor.withOpacity(0.3),
+                    color: widget.theme.borderColor.withValues(alpha: 0.3),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide(
-                    color: widget.theme.borderColor.withOpacity(0.3),
+                    color: widget.theme.borderColor.withValues(alpha: 0.3),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
@@ -153,7 +156,9 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                 TextButton(
                   onPressed: _cancel,
                   style: TextButton.styleFrom(
-                    foregroundColor: widget.theme.textColor.withOpacity(0.7),
+                    foregroundColor: widget.theme.textColor.withValues(
+                      alpha: 0.7,
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 12,

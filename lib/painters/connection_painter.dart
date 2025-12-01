@@ -4,17 +4,42 @@ import '../models/canvas_node.dart';
 import '../models/node_connection.dart';
 import '../theme_manager.dart';
 
-/// ConnectionPainter: Custom painter for rendering node connections
+/// ConnectionPainter: Optimized painter for rendering node connections
+/// 
+/// PERFORMANCE OPTIMIZATIONS:
+/// - O(1) node lookup using Map instead of O(n) firstWhere
+/// - Paint object pooling to avoid allocations
+/// - Path object reuse for arrowheads and curves
+/// - Complexity: O(M) where M = number of connections
 class ConnectionPainter extends CustomPainter {
   final List<NodeConnection> connections;
-  final List<CanvasNode> nodes;
+  final Map<String, CanvasNode> nodeMap; // O(1) lookup instead of O(n) firstWhere
   final CanvasTheme theme;
+
+  // Reusable Paint objects (created once, reused)
+  late final Paint _linePaint;
+  late final Paint _arrowPaint;
+  late final Path _arrowPath;
+  late final Path _curvePath;
 
   ConnectionPainter({
     required this.connections,
-    required this.nodes,
+    required Map<String, CanvasNode> nodeMap,
     required this.theme,
-  });
+  }) : nodeMap = Map<String, CanvasNode>.unmodifiable(nodeMap) {
+    // Preallocate Paint objects
+    _linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    _arrowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    // Preallocate Path objects
+    _arrowPath = Path();
+    _curvePath = Path();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -24,31 +49,12 @@ class ConnectionPainter extends CustomPainter {
   }
 
   void _paintConnection(Canvas canvas, NodeConnection connection) {
-    // Find source and target nodes
-    final sourceNode = nodes.firstWhere(
-      (node) => node.id == connection.sourceNodeId,
-      orElse: () => CanvasNode(
-        id: '',
-        position: Offset.zero,
-        size: Size.zero,
-        type: NodeType.basicNode,
-        color: Colors.transparent,
-      ),
-    );
-
-    final targetNode = nodes.firstWhere(
-      (node) => node.id == connection.targetNodeId,
-      orElse: () => CanvasNode(
-        id: '',
-        position: Offset.zero,
-        size: Size.zero,
-        type: NodeType.basicNode,
-        color: Colors.transparent,
-      ),
-    );
+    // O(1) lookup instead of O(n) firstWhere
+    final sourceNode = nodeMap[connection.sourceNodeId];
+    final targetNode = nodeMap[connection.targetNodeId];
 
     // Skip if nodes not found
-    if (sourceNode.id.isEmpty || targetNode.id.isEmpty) return;
+    if (sourceNode == null || targetNode == null) return;
 
     // Calculate connection points (center of nodes)
     final startPoint = sourceNode.center;
@@ -78,14 +84,13 @@ class ConnectionPainter extends CustomPainter {
     Offset end,
     NodeConnection connection,
   ) {
-    final paint = Paint()
+    // Reuse preallocated Paint object
+    _linePaint
       ..color = connection.color
-      ..strokeWidth = connection.strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = connection.strokeWidth;
 
     // Draw line
-    canvas.drawLine(start, end, paint);
+    canvas.drawLine(start, end, _linePaint);
 
     // Draw arrowhead
     _drawArrowhead(canvas, start, end, connection.color, connection.strokeWidth);
@@ -98,13 +103,12 @@ class ConnectionPainter extends CustomPainter {
     Offset end,
     NodeConnection connection,
   ) {
-    final paint = Paint()
+    // Reuse preallocated Paint object
+    _linePaint
       ..color = connection.color
-      ..strokeWidth = connection.strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = connection.strokeWidth;
 
-    canvas.drawLine(start, end, paint);
+    canvas.drawLine(start, end, _linePaint);
   }
 
   /// Draw a dashed line (for associations)
@@ -114,11 +118,10 @@ class ConnectionPainter extends CustomPainter {
     Offset end,
     NodeConnection connection,
   ) {
-    final paint = Paint()
+    // Reuse preallocated Paint object
+    _linePaint
       ..color = connection.color
-      ..strokeWidth = connection.strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = connection.strokeWidth;
 
     const dashWidth = 8.0;
     const dashSpace = 4.0;
@@ -130,7 +133,7 @@ class ConnectionPainter extends CustomPainter {
     while (currentDistance < distance) {
       final dashStart = start + direction * currentDistance;
       final dashEnd = start + direction * math.min(currentDistance + dashWidth, distance);
-      canvas.drawLine(dashStart, dashEnd, paint);
+      canvas.drawLine(dashStart, dashEnd, _linePaint);
       currentDistance += dashWidth + dashSpace;
     }
   }
@@ -142,18 +145,19 @@ class ConnectionPainter extends CustomPainter {
     Offset end,
     NodeConnection connection,
   ) {
-    final paint = Paint()
+    // Reuse preallocated Paint object
+    _linePaint
       ..color = connection.color
-      ..strokeWidth = connection.strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = connection.strokeWidth;
 
     // Calculate control points for smooth curve
     final midX = (start.dx + end.dx) / 2;
     final controlPoint1 = Offset(midX, start.dy);
     final controlPoint2 = Offset(midX, end.dy);
 
-    final path = Path()
+    // Reuse preallocated Path object
+    _curvePath.reset();
+    _curvePath
       ..moveTo(start.dx, start.dy)
       ..cubicTo(
         controlPoint1.dx,
@@ -164,7 +168,7 @@ class ConnectionPainter extends CustomPainter {
         end.dy,
       );
 
-    canvas.drawPath(path, paint);
+    canvas.drawPath(_curvePath, _linePaint);
 
     // Draw arrowhead at end
     _drawArrowhead(canvas, start, end, connection.color, connection.strokeWidth);
@@ -181,7 +185,9 @@ class ConnectionPainter extends CustomPainter {
     const arrowSize = 10.0;
     final angle = math.atan2(end.dy - start.dy, end.dx - start.dx);
 
-    final arrowPath = Path()
+    // Reuse preallocated Path object
+    _arrowPath.reset();
+    _arrowPath
       ..moveTo(end.dx, end.dy)
       ..lineTo(
         end.dx - arrowSize * math.cos(angle - math.pi / 6),
@@ -193,19 +199,18 @@ class ConnectionPainter extends CustomPainter {
         end.dy - arrowSize * math.sin(angle + math.pi / 6),
       );
 
-    final arrowPaint = Paint()
+    // Reuse preallocated Paint object
+    _arrowPaint
       ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = strokeWidth;
 
-    canvas.drawPath(arrowPath, arrowPaint);
+    canvas.drawPath(_arrowPath, _arrowPaint);
   }
 
   @override
   bool shouldRepaint(ConnectionPainter oldDelegate) {
     return oldDelegate.connections != connections ||
-        oldDelegate.nodes != nodes ||
+        oldDelegate.nodeMap != nodeMap ||
         oldDelegate.theme != theme;
   }
 }

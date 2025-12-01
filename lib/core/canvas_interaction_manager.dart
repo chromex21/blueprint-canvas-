@@ -61,6 +61,7 @@ class _CanvasInteractionManagerState extends State<CanvasInteractionManager> {
 
   // Viewport interaction state
   double _lastScale = 1.0;
+  Offset? _lastFocalPoint;
 
   @override
   Widget build(BuildContext context) {
@@ -71,11 +72,8 @@ class _CanvasInteractionManagerState extends State<CanvasInteractionManager> {
         // Primary touch interactions
         onTapDown: _handleTapDown,
         onDoubleTap: _handleDoubleTap,
-        onPanStart: _handlePanStart,
-        onPanUpdate: _handlePanUpdate,
-        onPanEnd: _handlePanEnd,
 
-        // Scale gesture for pinch-to-zoom
+        // Use scale gesture for both pan and pinch-to-zoom
         onScaleStart: _handleScaleStart,
         onScaleUpdate: _handleScaleUpdate,
         onScaleEnd: _handleScaleEnd,
@@ -139,6 +137,8 @@ class _CanvasInteractionManagerState extends State<CanvasInteractionManager> {
       case CanvasTool.eraser:
         _handleEraserTap(worldPosition);
         break;
+      default:
+        break;
     }
   }
 
@@ -160,49 +160,77 @@ class _CanvasInteractionManagerState extends State<CanvasInteractionManager> {
   }
 
   // ============================================================================
-  // PAN GESTURES
+  // SCALE GESTURES (Handles both pan and pinch-to-zoom)
   // ============================================================================
 
-  void _handlePanStart(DragStartDetails details) {
-    final screenPosition = details.localPosition;
+  void _handleScaleStart(ScaleStartDetails details) {
+    _lastScale = 1.0; // Reset to 1.0 for relative scaling
+    _lastFocalPoint = details.focalPoint;
+
+    final screenPosition = details.focalPoint;
     final worldPosition = widget.viewportController.screenToWorld(
       screenPosition,
       widget.canvasSize,
     );
+
+    // Handle interaction start based on active tool
     switch (widget.activeTool) {
       case CanvasTool.select:
         _handleSelectPanStart(worldPosition, screenPosition);
         break;
       default:
-        // For non-select tools, enable canvas panning with middle mouse or specific gesture
+        // For non-select tools, enable canvas panning
         _isPanning = true;
         break;
     }
   }
 
-  void _handlePanUpdate(DragUpdateDetails details) {
-    final screenPosition = details.localPosition;
-    final worldPosition = widget.viewportController.screenToWorld(
-      screenPosition,
-      widget.canvasSize,
-    );
-    final screenDelta = details.delta;
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    final screenPosition = details.focalPoint;
 
-    if (_isPanning) {
-      // Canvas panning
-      widget.viewportController.pan(screenDelta);
-    } else {
-      switch (widget.activeTool) {
-        case CanvasTool.select:
-          _handleSelectPanUpdate(worldPosition, screenPosition, screenDelta);
-          break;
-        default:
-          break;
+    if (details.pointerCount == 2) {
+      // Multi-finger pinch zoom
+      final scaleFactor = details.scale / _lastScale;
+
+      widget.viewportController.zoomAt(
+        screenPosition,
+        scaleFactor,
+        widget.canvasSize,
+      );
+      _lastScale = details.scale;
+    } else if (details.pointerCount == 1 && _lastFocalPoint != null) {
+      // Single finger pan/drag
+      final worldPosition = widget.viewportController.screenToWorld(
+        screenPosition,
+        widget.canvasSize,
+      );
+
+      // Calculate delta from last focal point
+      final screenDelta = details.focalPoint - _lastFocalPoint!;
+
+      if (_isPanning) {
+        // Canvas panning
+        widget.viewportController.pan(screenDelta);
+      } else {
+        // Handle tool-specific interactions
+        switch (widget.activeTool) {
+          case CanvasTool.select:
+            _handleSelectPanUpdate(worldPosition, screenPosition, screenDelta);
+            break;
+          default:
+            break;
+        }
       }
     }
+
+    // Update last focal point
+    _lastFocalPoint = details.focalPoint;
   }
 
-  void _handlePanEnd(DragEndDetails details) {
+  void _handleScaleEnd(ScaleEndDetails details) {
+    _lastScale = 1.0;
+    _lastFocalPoint = null;
+
     if (_isPanning) {
       _isPanning = false;
     } else {
@@ -214,33 +242,6 @@ class _CanvasInteractionManagerState extends State<CanvasInteractionManager> {
           break;
       }
     }
-  }
-
-  // ============================================================================
-  // SCALE GESTURES (Pinch-to-zoom)
-  // ============================================================================
-
-  void _handleScaleStart(ScaleStartDetails details) {
-    _lastScale = widget.viewportController.scale;
-  }
-
-  void _handleScaleUpdate(ScaleUpdateDetails details) {
-    if (details.pointerCount == 2) {
-      // Multi-finger pinch zoom
-      final scaleFactor = details.scale / _lastScale;
-      final focalPoint = details.focalPoint;
-
-      widget.viewportController.zoomAt(
-        focalPoint,
-        scaleFactor,
-        widget.canvasSize,
-      );
-      _lastScale = details.scale;
-    }
-  }
-
-  void _handleScaleEnd(ScaleEndDetails details) {
-    _lastScale = 1.0;
   }
 
   // ============================================================================

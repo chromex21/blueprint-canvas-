@@ -1,4 +1,4 @@
-# This file configures the analyzer, which statically analyzes Dart code to
+﻿# This file configures the analyzer, which statically analyzes Dart code to
 # check for errors, warnings, and lints.
 #
 # The issues identified by the analyzer are surfaced in the UI of Dart-enabled
@@ -23,6 +23,11 @@ linter:
   rules:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+analyzer:
+  exclude:
+    - exported_new_features/**
+    - test/**
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

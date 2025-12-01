@@ -208,6 +208,8 @@ class CanvasAccessibilityManager extends ChangeNotifier {
         return 'Triangle shape';
       case NodeType.shapeHexagon:
         return 'Hexagon shape';
+      default:
+        return 'Unknown node';
     }
   }
 
@@ -339,8 +341,13 @@ class CanvasAccessibilityManager extends ChangeNotifier {
   void _announceMessage(String message) {
     if (!_announceActions) return;
 
-    // Use SemanticsService to announce messages
-    SemanticsService.announce(message, TextDirection.ltr);
+    // Use SemanticsService to announce messages (new API)
+    // New API requires a FlutterView as the first argument — use the primary view.
+    SemanticsService.sendAnnouncement(
+      WidgetsBinding.instance.platformDispatcher.views.first,
+      message,
+      TextDirection.ltr,
+    );
   }
 
   /// Announce canvas state change

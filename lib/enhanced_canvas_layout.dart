@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme_manager.dart';
-import '../quick_actions_toolbar.dart';
-import '../shapes_panel.dart';
-import '../settings_dialog.dart';
-import '../blueprint_canvas_painter.dart';
-import '../managers/node_manager.dart';
-import '../models/canvas_node.dart';
-import '../widgets/node_editor_dialog.dart';
+import 'theme_manager.dart';
+import 'quick_actions_toolbar.dart';
+import 'shapes_panel.dart';
+import 'settings_dialog.dart';
+import 'painters/grid_painter_optimized.dart';
+import 'managers/node_manager.dart';
+import 'models/canvas_node.dart';
+import 'widgets/node_editor_dialog.dart';
 import 'core/viewport_controller.dart';
 import 'core/canvas_accessibility_manager.dart';
 import 'core/layer_manager.dart';
 import 'core/canvas_renderer.dart';
+import 'core/canvas_interaction_manager.dart';
+import 'utils/test_data_generator.dart';
 
 /// EnhancedCanvasLayout: Advanced canvas with modular architecture
-/// 
+///
 /// Features:
 /// - Viewport transformation (zoom/pan)
 /// - Layer management system
@@ -25,10 +27,7 @@ import 'core/canvas_renderer.dart';
 class EnhancedCanvasLayout extends StatefulWidget {
   final ThemeManager themeManager;
 
-  const EnhancedCanvasLayout({
-    super.key,
-    required this.themeManager,
-  });
+  const EnhancedCanvasLayout({super.key, required this.themeManager});
 
   @override
   State<EnhancedCanvasLayout> createState() => _EnhancedCanvasLayoutState();
@@ -40,6 +39,9 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
   bool _showGrid = true;
   bool _snapToGrid = false;
   double _gridSpacing = 50.0;
+
+  // Performance settings
+  bool _showPerformanceMetrics = false;
 
   // UI state
   bool _showShapesPanel = false;
@@ -56,7 +58,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize core managers
     _nodeManager = NodeManager();
     _viewportController = ViewportController();
@@ -105,6 +107,8 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
         onSnapToGridChanged: (value) {
           setState(() => _snapToGrid = value);
         },
+        currentDockScale: 1.0,
+        onDockScaleChanged: (value) {},
         onResetView: () {
           _viewportController.reset();
         },
@@ -184,8 +188,9 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
         event.logicalKey,
         ctrlPressed: HardwareKeyboard.instance.isControlPressed,
       );
-      
-      if (action != null && _accessibilityManager.handleKeyboardAction(action)) {
+
+      if (action != null &&
+          _accessibilityManager.handleKeyboardAction(action)) {
         return KeyEventResult.handled;
       }
 
@@ -205,18 +210,22 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
     // Zoom shortcuts
     if (event.logicalKey == LogicalKeyboardKey.equal && isCtrl) {
       _viewportController.zoomAt(
-        Offset(MediaQuery.of(context).size.width / 2, 
-               MediaQuery.of(context).size.height / 2),
+        Offset(
+          MediaQuery.of(context).size.width / 2,
+          MediaQuery.of(context).size.height / 2,
+        ),
         1.2,
         MediaQuery.of(context).size,
       );
       return true;
     }
-    
+
     if (event.logicalKey == LogicalKeyboardKey.minus && isCtrl) {
       _viewportController.zoomAt(
-        Offset(MediaQuery.of(context).size.width / 2, 
-               MediaQuery.of(context).size.height / 2),
+        Offset(
+          MediaQuery.of(context).size.width / 2,
+          MediaQuery.of(context).size.height / 2,
+        ),
         0.8,
         MediaQuery.of(context).size,
       );
@@ -262,6 +271,42 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
       return true;
     }
 
+    // Performance metrics toggle (Ctrl+P)
+    if (event.logicalKey == LogicalKeyboardKey.keyP && isCtrl) {
+      setState(() {
+        _showPerformanceMetrics = !_showPerformanceMetrics;
+      });
+      return true;
+    }
+
+    // Test data generation shortcuts (Ctrl+Shift+Number)
+    if (isCtrl && isShift) {
+      if (event.logicalKey == LogicalKeyboardKey.digit1) {
+        TestDataGenerator.generateGrid(_nodeManager, columns: 10, rows: 10);
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit2) {
+        TestDataGenerator.generateRandom(_nodeManager, count: 500);
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit3) {
+        TestDataGenerator.generateStressTest(_nodeManager, count: 1000);
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit4) {
+        TestDataGenerator.generateSpiral(_nodeManager, count: 100);
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit5) {
+        TestDataGenerator.generateConnectedNodes(_nodeManager, count: 50);
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit0) {
+        TestDataGenerator.clearTestData(_nodeManager);
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -280,10 +325,12 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
     for (final node in _nodeManager.nodes) {
       minX = minX < node.position.dx ? minX : node.position.dx;
       minY = minY < node.position.dy ? minY : node.position.dy;
-      maxX = maxX > (node.position.dx + node.size.width) 
-          ? maxX : (node.position.dx + node.size.width);
-      maxY = maxY > (node.position.dy + node.size.height) 
-          ? maxY : (node.position.dy + node.size.height);
+      maxX = maxX > (node.position.dx + node.size.width)
+          ? maxX
+          : (node.position.dx + node.size.width);
+      maxY = maxY > (node.position.dy + node.size.height)
+          ? maxY
+          : (node.position.dy + node.size.height);
     }
 
     return Rect.fromLTRB(minX, minY, maxX, maxY);
@@ -313,6 +360,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
+                        // ignore: avoid_unnecessary_containers
                         child: Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
@@ -332,15 +380,15 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                           child: _accessibilityManager.buildCanvasSemantics(
                             child: Stack(
                               children: [
-                                // Background grid layer
-                                BlueprintCanvasPainter(
-                                  themeManager: widget.themeManager,
+                                // Background grid layer (optimized for viewport)
+                                // Note: Grid appearance is immutable; ThemeManager has no effect
+                                OptimizedGridPainter(
                                   showGrid: _showGrid,
+                                  viewportController: _viewportController,
                                   gridSpacing: _gridSpacing,
-                                  dotSize: 2.0,
                                 ),
-                                // Enhanced interactive canvas
-                                EnhancedInteractiveCanvas(
+                                // Interactive canvas with modular architecture
+                                CanvasInteractionManager(
                                   themeManager: widget.themeManager,
                                   nodeManager: _nodeManager,
                                   viewportController: _viewportController,
@@ -348,8 +396,32 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                                   snapToGrid: _snapToGrid,
                                   gridSpacing: _gridSpacing,
                                   selectedShapeType: _selectedShapeType,
+                                  canvasSize: MediaQuery.of(context).size,
                                   onShapePlaced: _handleShapePlaced,
                                   onNodeEditorRequested: _openNodeEditor,
+                                  child: AnimatedBuilder(
+                                    animation: Listenable.merge([
+                                      _nodeManager,
+                                      _viewportController,
+                                    ]),
+                                    builder: (context, _) {
+                                      return CustomPaint(
+                                        painter: CanvasRenderer(
+                                          theme:
+                                              widget.themeManager.currentTheme,
+                                          nodeManager: _nodeManager,
+                                          viewportController:
+                                              _viewportController,
+                                          canvasSize: MediaQuery.of(
+                                            context,
+                                          ).size,
+                                          showPerformanceMetrics:
+                                              _showPerformanceMetrics,
+                                        ),
+                                        child: Container(),
+                                      );
+                                    },
+                                  ),
                                 ),
                               ],
                             ),
@@ -398,7 +470,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
       children: [
         // Header
         _buildPanelHeader(theme),
-        
+
         // Quick Actions
         Padding(
           padding: const EdgeInsets.all(16),
@@ -406,6 +478,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
             themeManager: widget.themeManager,
             onSettingsTap: _openSettings,
             onShapesTool: _toggleShapesPanel,
+            onMediaTool: () {},
             onToolChanged: _handleToolChanged,
             activeTool: _activeTool,
           ),
@@ -413,12 +486,12 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
 
         // Layer Controls
         _buildLayerControls(theme),
-        
+
         // Viewport Info
         _buildViewportInfo(theme),
-        
+
         Expanded(child: Container()),
-        
+
         // Footer
         _buildPanelFooter(theme),
       ],
@@ -431,9 +504,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
       decoration: BoxDecoration(
         color: theme.backgroundColor.withValues(alpha: 0.3),
         border: Border(
-          bottom: BorderSide(
-            color: theme.borderColor.withValues(alpha: 0.2),
-          ),
+          bottom: BorderSide(color: theme.borderColor.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
@@ -488,9 +559,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
           decoration: BoxDecoration(
             color: theme.backgroundColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.borderColor.withValues(alpha: 0.1),
-            ),
+            border: Border.all(color: theme.borderColor.withValues(alpha: 0.1)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,9 +628,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
           decoration: BoxDecoration(
             color: theme.backgroundColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.borderColor.withValues(alpha: 0.1),
-            ),
+            border: Border.all(color: theme.borderColor.withValues(alpha: 0.1)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,9 +680,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
       decoration: BoxDecoration(
         color: theme.backgroundColor.withValues(alpha: 0.2),
         border: Border(
-          top: BorderSide(
-            color: theme.borderColor.withValues(alpha: 0.1),
-          ),
+          top: BorderSide(color: theme.borderColor.withValues(alpha: 0.1)),
         ),
       ),
       child: Column(
@@ -734,7 +799,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                     ],
                   ),
                 ),
-                
+
                 // Layer list
                 Expanded(
                   child: ListView.builder(
@@ -742,7 +807,7 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                     itemBuilder: (context, index) {
                       final layer = _layerManager.layers[index];
                       final isActive = layer.id == _layerManager.activeLayerId;
-                      
+
                       return ListTile(
                         selected: isActive,
                         leading: Container(
@@ -757,7 +822,9 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                           layer.name,
                           style: TextStyle(
                             color: theme.textColor,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isActive
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
                         subtitle: Text(
@@ -772,22 +839,22 @@ class _EnhancedCanvasLayoutState extends State<EnhancedCanvasLayout>
                           children: [
                             IconButton(
                               icon: Icon(
-                                layer.isVisible 
-                                    ? Icons.visibility 
+                                layer.isVisible
+                                    ? Icons.visibility
                                     : Icons.visibility_off,
                                 size: 16,
                               ),
-                              onPressed: () => _layerManager.toggleLayerVisibility(layer.id),
+                              onPressed: () =>
+                                  _layerManager.toggleLayerVisibility(layer.id),
                               color: theme.textColor.withValues(alpha: 0.6),
                             ),
                             IconButton(
                               icon: Icon(
-                                layer.isLocked 
-                                    ? Icons.lock 
-                                    : Icons.lock_open,
+                                layer.isLocked ? Icons.lock : Icons.lock_open,
                                 size: 16,
                               ),
-                              onPressed: () => _layerManager.toggleLayerLock(layer.id),
+                              onPressed: () =>
+                                  _layerManager.toggleLayerLock(layer.id),
                               color: theme.textColor.withValues(alpha: 0.6),
                             ),
                           ],
