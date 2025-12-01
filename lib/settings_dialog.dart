@@ -7,9 +7,11 @@ class SettingsDialog extends StatefulWidget {
   final double currentGridSpacing;
   final bool currentGridVisible;
   final bool currentSnapToGrid;
+  final double currentDockScale; // Dock panel size scale
   final ValueChanged<double> onGridSpacingChanged;
   final ValueChanged<bool> onGridVisibilityChanged;
   final ValueChanged<bool> onSnapToGridChanged;
+  final ValueChanged<double> onDockScaleChanged; // Dock scale callback
   final VoidCallback onResetView;
 
   const SettingsDialog({
@@ -18,9 +20,11 @@ class SettingsDialog extends StatefulWidget {
     required this.currentGridSpacing,
     required this.currentGridVisible,
     required this.currentSnapToGrid,
+    required this.currentDockScale,
     required this.onGridSpacingChanged,
     required this.onGridVisibilityChanged,
     required this.onSnapToGridChanged,
+    required this.onDockScaleChanged,
     required this.onResetView,
   });
 
@@ -32,6 +36,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double _gridSpacing;
   late bool _gridVisible;
   late bool _snapToGrid;
+  late double _dockScale;
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _gridSpacing = widget.currentGridSpacing;
     _gridVisible = widget.currentGridVisible;
     _snapToGrid = widget.currentSnapToGrid;
+    _dockScale = widget.currentDockScale;
   }
 
   @override
@@ -105,12 +111,39 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Text(
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
                               'Configure canvas appearance and behavior',
                               style: TextStyle(
                                 color: theme.textColor.withValues(alpha: 0.6),
                                 fontSize: 13,
                               ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.accentColor.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: theme.accentColor.withValues(alpha: 0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'v2.0 Stable',
+                                    style: TextStyle(
+                                      color: theme.accentColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -145,10 +178,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         _buildCanvasControls(theme),
                         const SizedBox(height: 24),
 
-                        // Animation Settings Section
-                        _buildSectionHeader('Animation Effects', theme, Icons.auto_awesome),
+                        // Dock Panel Size Section
+                        _buildSectionHeader('Dock Panels', theme, Icons.dock),
                         const SizedBox(height: 12),
-                        _buildAnimationControls(theme),
+                        _buildDockPanelControls(theme),
                         const SizedBox(height: 24),
 
                         // Quick Actions Section
@@ -185,6 +218,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             _gridSpacing = widget.currentGridSpacing;
                             _gridVisible = widget.currentGridVisible;
                             _snapToGrid = widget.currentSnapToGrid;
+                            _dockScale = widget.currentDockScale;
                           });
                         },
                         child: Text(
@@ -199,6 +233,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           widget.onGridSpacingChanged(_gridSpacing);
                           widget.onGridVisibilityChanged(_gridVisible);
                           widget.onSnapToGridChanged(_snapToGrid);
+                          widget.onDockScaleChanged(_dockScale);
                           Navigator.of(context).pop();
                         },
                         style: ElevatedButton.styleFrom(
@@ -390,7 +425,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _buildAnimationControls(CanvasTheme theme) {
+  Widget _buildDockPanelControls(CanvasTheme theme) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -401,57 +436,89 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Enable Animations Toggle
+          // Info text
           Row(
             children: [
               Icon(
-                Icons.animation,
-                color: theme.accentColor.withValues(alpha: 0.6),
-                size: 20,
+                Icons.info_outline,
+                size: 16,
+                color: theme.accentColor.withValues(alpha: 0.7),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Enable Animations',
+                  'Adjust the size of shape and media dock panels',
                   style: TextStyle(
-                    color: theme.textColor.withValues(alpha: 0.8),
-                    fontSize: 14,
+                    color: theme.textColor.withValues(alpha: 0.6),
+                    fontSize: 12,
                   ),
                 ),
               ),
-              Switch(
-                value: widget.themeManager.animationsEnabled,
-                onChanged: (value) => widget.themeManager.setAnimationsEnabled(value),
-                activeThumbColor: theme.accentColor,
-                activeTrackColor: theme.accentColor.withValues(alpha: 0.3),
-              ),
             ],
-          ),
-          const SizedBox(height: 20),
-
-          // Grid Pulse Intensity
-          _buildPercentageSlider(
-            'Grid Pulse Intensity',
-            widget.themeManager.gridPulseIntensity,
-            (value) => widget.themeManager.setGridPulseIntensity(value),
-            theme,
-            enabled: widget.themeManager.animationsEnabled,
           ),
           const SizedBox(height: 16),
 
-          // Radar Sweep Intensity
-          _buildPercentageSlider(
-            'Radar Sweep Intensity',
-            widget.themeManager.radarSweepIntensity,
-            (value) => widget.themeManager.setRadarSweepIntensity(value),
+          // Dock Scale Slider
+          _buildSlider(
+            'Dock Panel Size',
+            _dockScale,
+            0.75,
+            2.0,
+            5,
+            (value) => setState(() => _dockScale = value),
             theme,
-            enabled: widget.themeManager.animationsEnabled,
+            unit: 'x',
+            decimals: 2,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Scale indicators
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildScaleIndicator('Compact', 0.75, _dockScale, theme),
+              _buildScaleIndicator('Default', 1.0, _dockScale, theme),
+              _buildScaleIndicator('Large', 1.5, _dockScale, theme),
+              _buildScaleIndicator('Max', 2.0, _dockScale, theme),
+            ],
           ),
         ],
       ),
     );
   }
+
+  Widget _buildScaleIndicator(String label, double scale, double currentScale, CanvasTheme theme) {
+    final isActive = (currentScale - scale).abs() < 0.1;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive
+            ? theme.accentColor.withValues(alpha: 0.15)
+            : theme.backgroundColor.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isActive
+              ? theme.accentColor.withValues(alpha: 0.5)
+              : theme.borderColor.withValues(alpha: 0.2),
+          width: isActive ? 1.5 : 1,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isActive
+              ? theme.accentColor
+              : theme.textColor.withValues(alpha: 0.5),
+          fontSize: 10,
+          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildQuickActions(CanvasTheme theme) {
     return Column(
@@ -521,6 +588,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     ValueChanged<double> onChanged,
     CanvasTheme theme, {
     String unit = '',
+    int decimals = 0,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -542,7 +610,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                '${value.toInt()}$unit',
+                '${value.toStringAsFixed(decimals)}$unit',
                 style: TextStyle(
                   color: theme.accentColor,
                   fontSize: 13,
@@ -575,69 +643,4 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _buildPercentageSlider(
-    String label,
-    double value,
-    ValueChanged<double> onChanged,
-    CanvasTheme theme, {
-    bool enabled = true,
-  }) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.4,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: theme.textColor.withValues(alpha: 0.8),
-                  fontSize: 14,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${(value * 100).toInt()}%',
-                  style: TextStyle(
-                    color: theme.accentColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SliderTheme(
-            data: SliderThemeData(
-              activeTrackColor: theme.accentColor,
-              inactiveTrackColor: theme.accentColor.withValues(alpha: 0.2),
-              thumbColor: theme.accentColor,
-              overlayColor: theme.accentColor.withValues(alpha: 0.2),
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              disabledActiveTrackColor: theme.accentColor.withValues(alpha: 0.3),
-              disabledInactiveTrackColor: theme.accentColor.withValues(alpha: 0.1),
-              disabledThumbColor: theme.accentColor.withValues(alpha: 0.3),
-            ),
-            child: Slider(
-              value: value,
-              min: 0.0,
-              max: 1.0,
-              divisions: 20,
-              onChanged: enabled ? onChanged : null,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
