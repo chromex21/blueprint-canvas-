@@ -8,10 +8,7 @@ class NodePainter extends CustomPainter {
   final List<CanvasNode> nodes;
   final CanvasTheme theme;
 
-  NodePainter({
-    required this.nodes,
-    required this.theme,
-  });
+  NodePainter({required this.nodes, required this.theme});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -56,6 +53,9 @@ class NodePainter extends CustomPainter {
       case NodeType.shapeHexagon:
         _paintHexagon(canvas, node);
         break;
+      default:
+        // Unknown node type: fallback to basic node painter to avoid missing cases
+        _paintBasicNode(canvas, node);
     }
 
     canvas.restore();
@@ -73,7 +73,7 @@ class NodePainter extends CustomPainter {
     // Shadow
     if (node.isSelected) {
       final shadowPaint = Paint()
-        ..color = theme.accentColor.withOpacity(0.3)
+        ..color = theme.accentColor.withValues(alpha: 0.3)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, const Radius.circular(12)),
@@ -103,14 +103,11 @@ class NodePainter extends CustomPainter {
     // Selection glow
     if (node.isSelected) {
       final glowPaint = Paint()
-        ..color = theme.accentColor.withOpacity(0.15)
+        ..color = theme.accentColor.withValues(alpha: 0.15)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 6;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          rect.inflate(3),
-          const Radius.circular(15),
-        ),
+        RRect.fromRectAndRadius(rect.inflate(3), const Radius.circular(15)),
         glowPaint,
       );
     }
@@ -137,7 +134,7 @@ class NodePainter extends CustomPainter {
 
     // Shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.2)
+      ..color = Colors.black.withAlpha((0.2 * 255).round())
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
     canvas.drawRect(rect.shift(const Offset(2, 3)), shadowPaint);
 
@@ -163,7 +160,7 @@ class NodePainter extends CustomPainter {
       ..close();
 
     final foldPaint = Paint()
-      ..color = node.color.withOpacity(0.7)
+      ..color = node.color.withValues(alpha: 0.7)
       ..style = PaintingStyle.fill;
     canvas.drawPath(foldPath, foldPaint);
 
@@ -200,14 +197,13 @@ class NodePainter extends CustomPainter {
     // Selection outline only
     if (node.isSelected) {
       final selectionPaint = Paint()
-        ..color = theme.accentColor.withOpacity(0.3)
+        ..color = theme.accentColor.withValues(alpha: 0.3)
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
 
-      final path = Path()
-        ..addRect(rect.inflate(4));
+      final path = Path()..addRect(rect.inflate(4));
       canvas.drawPath(path, selectionPaint);
     }
 
@@ -234,7 +230,7 @@ class NodePainter extends CustomPainter {
 
     // Fill
     final fillPaint = Paint()
-      ..color = node.color.withOpacity(0.3)
+      ..color = node.color.withValues(alpha: 0.3)
       ..style = PaintingStyle.fill;
     canvas.drawRect(rect, fillPaint);
 
@@ -295,12 +291,14 @@ class NodePainter extends CustomPainter {
   /// Paint a triangle shape
   void _paintTriangle(Canvas canvas, CanvasNode node) {
     final center = node.center;
-    final halfW = node.size.width / 2;
     final height = node.size.height;
 
     final path = Path()
       ..moveTo(center.dx, node.position.dy) // Top
-      ..lineTo(node.position.dx + node.size.width, node.position.dy + height) // Bottom right
+      ..lineTo(
+        node.position.dx + node.size.width,
+        node.position.dy + height,
+      ) // Bottom right
       ..lineTo(node.position.dx, node.position.dy + height) // Bottom left
       ..close();
 
@@ -378,10 +376,7 @@ class NodePainter extends CustomPainter {
       ellipsis: maxLines != null ? '...' : null,
     );
 
-    textPainter.layout(
-      minWidth: 0,
-      maxWidth: rect.width,
-    );
+    textPainter.layout(minWidth: 0, maxWidth: rect.width);
 
     final offset = Offset(
       rect.left + (rect.width - textPainter.width) / 2,

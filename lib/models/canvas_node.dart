@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 /// NodeType: Different types of nodes users can create
+/// 
+/// TEXT-EDITABLE SHAPES (per master prompt):
+/// - basicNode (RoundedRectangle)
+/// - shapeRect (Rectangle) 
+/// - shapePill (Pill)
 enum NodeType {
-  basicNode,      // Mind map bubble (➕ tool)
+  basicNode,      // Mind map bubble / RoundedRectangle (TEXT-EDITABLE)
   stickyNote,     // Post-it style note
   textBlock,      // Free-form text (📝 tool)
-  shapeRect,      // Rectangle
-  shapeCircle,    // Circle
-  shapeDiamond,   // Diamond
-  shapeTriangle,  // Triangle
-  shapeHexagon,   // Hexagon
+  shapeRect,      // Rectangle (TEXT-EDITABLE)
+  shapePill,      // Pill/Oval shape (TEXT-EDITABLE)
+  shapeCircle,    // Circle (NOT text-editable)
+  shapeDiamond,   // Diamond (NOT text-editable)
+  shapeTriangle,  // Triangle (NOT text-editable)
+  shapeHexagon,   // Hexagon (NOT text-editable)
 }
 
 /// CanvasNode: Represents a single node on the canvas
@@ -129,19 +135,33 @@ class CanvasNode {
     Color color,
   ) {
     assert(shapeType == NodeType.shapeRect ||
+        shapeType == NodeType.shapePill ||
         shapeType == NodeType.shapeCircle ||
         shapeType == NodeType.shapeDiamond ||
         shapeType == NodeType.shapeTriangle ||
         shapeType == NodeType.shapeHexagon);
 
+    // Pill shape has different dimensions
+    final size = shapeType == NodeType.shapePill 
+        ? const Size(150, 80) 
+        : const Size(120, 120);
+
     return CanvasNode(
       id: _generateId(),
       position: position,
-      size: const Size(120, 120),
+      size: size,
       type: shapeType,
       content: '',
       color: color,
     );
+  }
+
+  /// Check if this node type supports text editing (per master prompt)
+  /// Only Rectangle, RoundedRectangle (basicNode), and Pill are text-editable
+  bool get isTextEditable {
+    return type == NodeType.basicNode ||  // RoundedRectangle
+           type == NodeType.shapeRect ||  // Rectangle
+           type == NodeType.shapePill;    // Pill
   }
 
   /// Generate unique ID

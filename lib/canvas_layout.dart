@@ -3,13 +3,14 @@ import 'theme_manager.dart';
 import 'quick_actions_toolbar.dart';
 import 'shapes_panel.dart';
 import 'settings_dialog.dart';
-import 'blueprint_canvas_painter.dart';
-import 'managers/node_manager.dart';
+import 'painters/grid_painter_optimized.dart';
+import 'managers/node_manager_optimized.dart';
 import 'models/canvas_node.dart';
-import 'widgets/interactive_canvas.dart';
+import 'widgets/interactive_canvas_optimized.dart';
+import 'core/viewport_controller.dart';
 
 /// CanvasLayout: Main layout with compact control panel and canvas
-/// 
+///
 /// Structure:
 /// - Compact side panel with quick actions toolbar (300px)
 /// - Canvas area with rounded border
@@ -18,10 +19,7 @@ import 'widgets/interactive_canvas.dart';
 class CanvasLayout extends StatefulWidget {
   final ThemeManager themeManager;
 
-  const CanvasLayout({
-    super.key,
-    required this.themeManager,
-  });
+  const CanvasLayout({super.key, required this.themeManager});
 
   @override
   State<CanvasLayout> createState() => _CanvasLayoutState();
@@ -38,18 +36,26 @@ class _CanvasLayoutState extends State<CanvasLayout> {
   CanvasTool _activeTool = CanvasTool.select;
   NodeType? _selectedShapeType; // For shape placement
 
-  // Node manager
-  late final NodeManager _nodeManager;
+  // Node manager (using optimized version for better performance)
+  late final NodeManagerOptimized _nodeManager;
+
+  // Viewport controller (ENABLED for zoom/pan support)
+  late final ViewportController _viewportController;
 
   @override
   void initState() {
     super.initState();
-    _nodeManager = NodeManager();
+    // Use optimized node manager for better performance
+    _nodeManager = NodeManagerOptimized();
+
+    // ✅ STABILIZATION FIX: Enable viewport controller for zoom/pan
+    _viewportController = ViewportController();
   }
 
   @override
   void dispose() {
     _nodeManager.dispose();
+    _viewportController.dispose();
     super.dispose();
   }
 
@@ -61,6 +67,7 @@ class _CanvasLayoutState extends State<CanvasLayout> {
         currentGridSpacing: _gridSpacing,
         currentGridVisible: _showGrid,
         currentSnapToGrid: _snapToGrid,
+        currentDockScale: 1.0,
         onGridSpacingChanged: (value) {
           setState(() => _gridSpacing = value);
         },
@@ -77,6 +84,7 @@ class _CanvasLayoutState extends State<CanvasLayout> {
             _snapToGrid = false;
           });
         },
+        onDockScaleChanged: (v) {},
       ),
     );
   }
@@ -143,17 +151,18 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                         clipBehavior: Clip.antiAlias,
                         child: Stack(
                           children: [
-                            // Background grid layer
-                            BlueprintCanvasPainter(
-                              themeManager: widget.themeManager,
+                            // Background grid layer (optimized with viewport)
+                            // Note: Grid appearance is immutable; ThemeManager has no effect
+                            OptimizedGridPainter(
                               showGrid: _showGrid,
+                              viewportController: _viewportController,
                               gridSpacing: _gridSpacing,
-                              dotSize: 2.0,
                             ),
-                            // Interactive canvas layer (nodes/connections)
-                            InteractiveCanvas(
+                            // Interactive canvas layer (nodes/connections) - OPTIMIZED
+                            InteractiveCanvasOptimized(
                               themeManager: widget.themeManager,
                               nodeManager: _nodeManager,
+                              viewportController: _viewportController,
                               activeTool: _activeTool,
                               snapToGrid: _snapToGrid,
                               gridSpacing: _gridSpacing,
@@ -203,7 +212,9 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: theme.accentColor.withValues(alpha: 0.1),
+                                  color: theme.accentColor.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(
@@ -228,7 +239,9 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                     Text(
                                       'Blueprint System',
                                       style: TextStyle(
-                                        color: theme.textColor.withValues(alpha: 0.6),
+                                        color: theme.textColor.withValues(
+                                          alpha: 0.6,
+                                        ),
                                         fontSize: 11,
                                       ),
                                     ),
@@ -246,6 +259,7 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                             themeManager: widget.themeManager,
                             onSettingsTap: _openSettings,
                             onShapesTool: _toggleShapesPanel,
+                            onMediaTool: () {},
                             onToolChanged: (tool) {
                               setState(() => _activeTool = tool);
                             },
@@ -264,27 +278,36 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: theme.backgroundColor.withValues(alpha: 0.3),
+                                    color: theme.backgroundColor.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: theme.borderColor.withValues(alpha: 0.1),
+                                      color: theme.borderColor.withValues(
+                                        alpha: 0.1,
+                                      ),
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
                                           Icon(
                                             Icons.layers_outlined,
                                             size: 16,
-                                            color: theme.textColor.withValues(alpha: 0.7),
+                                            color: theme.textColor.withValues(
+                                              alpha: 0.7,
+                                            ),
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
                                             'LAYERS',
                                             style: TextStyle(
-                                              color: theme.textColor.withValues(alpha: 0.7),
+                                              color: theme.textColor.withValues(
+                                                alpha: 0.7,
+                                              ),
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
                                               letterSpacing: 1.2,
@@ -296,7 +319,9 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                       Text(
                                         'Layer management coming soon...',
                                         style: TextStyle(
-                                          color: theme.textColor.withValues(alpha: 0.5),
+                                          color: theme.textColor.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -309,27 +334,36 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: theme.backgroundColor.withValues(alpha: 0.3),
+                                    color: theme.backgroundColor.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: theme.borderColor.withValues(alpha: 0.1),
+                                      color: theme.borderColor.withValues(
+                                        alpha: 0.1,
+                                      ),
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
                                           Icon(
                                             Icons.tune,
                                             size: 16,
-                                            color: theme.textColor.withValues(alpha: 0.7),
+                                            color: theme.textColor.withValues(
+                                              alpha: 0.7,
+                                            ),
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
                                             'PROPERTIES',
                                             style: TextStyle(
-                                              color: theme.textColor.withValues(alpha: 0.7),
+                                              color: theme.textColor.withValues(
+                                                alpha: 0.7,
+                                              ),
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
                                               letterSpacing: 1.2,
@@ -341,7 +375,9 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                       Text(
                                         'Select an element to view properties',
                                         style: TextStyle(
-                                          color: theme.textColor.withValues(alpha: 0.5),
+                                          color: theme.textColor.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -376,7 +412,9 @@ class _CanvasLayoutState extends State<CanvasLayout> {
                                 child: Text(
                                   'Click ⚙ for canvas settings',
                                   style: TextStyle(
-                                    color: theme.textColor.withValues(alpha: 0.5),
+                                    color: theme.textColor.withValues(
+                                      alpha: 0.5,
+                                    ),
                                     fontSize: 11,
                                   ),
                                 ),

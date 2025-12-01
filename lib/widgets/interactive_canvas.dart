@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/canvas_node.dart';
 import '../managers/node_manager.dart';
-import '../painters/node_painter.dart';
+import '../painters/node_painter_optimized.dart';
 import '../painters/connection_painter.dart';
 import '../widgets/node_editor_dialog.dart';
 import '../theme_manager.dart';
 import '../quick_actions_toolbar.dart';
 
-/// InteractiveCanvas: Main interactive canvas widget
+/// InteractiveCanvas: Main interactive canvas widget (DIRTY RECT OPTIMIZED)
+///
+/// PERFORMANCE OPTIMIZATIONS:
+/// - Dirty rect region invalidation during node dragging
+/// - Only repaints local area around moving nodes
+/// - Grid layer remains static (cached texture - DO NOT MODIFY)
+/// - Eliminates full-canvas repaints on pointer move
+///
 /// Handles gestures, renders nodes/connections, and manages user interactions
 class InteractiveCanvas extends StatefulWidget {
   final ThemeManager themeManager;
@@ -35,8 +42,9 @@ class InteractiveCanvas extends StatefulWidget {
 
 class _InteractiveCanvasState extends State<InteractiveCanvas> {
   // Gesture state
-  Offset? _dragStart;
   String? _draggedNodeId;
+  // ignore: unused_field
+  Offset? _dragStart;
   Offset? _connectionStart;
   String? _connectionSourceId;
   Offset? _currentPointer;
@@ -47,6 +55,11 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
 
   // Canvas boundaries
   Size? _canvasSize;
+
+  // Dirty rect tracking for optimization
+  final Map<String, Rect> _previousNodeRects = {};
+  // ignore: unused_field
+  Rect? _previousDirtyRect;
 
   @override
   Widget build(BuildContext context) {
@@ -74,9 +87,20 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
 
               return MouseRegion(
                 onHover: (event) {
-                  setState(() {
-                    _currentPointer = event.localPosition;
-                  });
+                  // PERFORMANCE FIX: Don't trigger setState on every mouse move!
+                  // Only update pointer position and repaint if drawing connection
+                  final newPointer = event.localPosition;
+
+                  // Only repaint if actively showing temporary connection line and position changed
+                  if (_connectionStart != null &&
+                      _connectionSourceId != null &&
+                      (_currentPointer == null ||
+                          _currentPointer != newPointer)) {
+                    _currentPointer = newPointer;
+                    setState(() {}); // Minimal targeted repaint
+                  } else {
+                    _currentPointer = newPointer;
+                  }
                 },
                 child: CustomPaint(
                   painter: _CanvasLayerPainter(
@@ -86,6 +110,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
                     currentPointer: _currentPointer,
                     selectBoxStart: _selectBoxStart,
                     selectBoxEnd: _selectBoxEnd,
+                    dirtyRect: _computeDirtyRect(),
                   ),
                   size: Size.infinite,
                 ),
@@ -95,6 +120,60 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
         );
       },
     );
+  }
+
+  // ============================================================================
+  // DIRTY RECT OPTIMIZATION
+  // ============================================================================
+
+  /// Compute dirty rect = union of old and new positions of moving nodes
+  Rect? _computeDirtyRect() {
+    if (_draggedNodeId == null) {
+      _previousDirtyRect = null;
+      _previousNodeRects.clear();
+      return null; // No dragging - full repaint needed
+    }
+
+    final draggingNodes =
+        widget.nodeManager.selectedNodeIds.contains(_draggedNodeId)
+        ? widget.nodeManager.selectedNodeIds.toList()
+        : [_draggedNodeId!];
+
+    Rect? dirtyRect;
+
+    for (final nodeId in draggingNodes) {
+      final node = widget.nodeManager.getNode(nodeId);
+      if (node == null) continue;
+
+      // Current node rect (with padding for shadows/selection glow)
+      final currentRect = Rect.fromLTWH(
+        node.position.dx,
+        node.position.dy,
+        node.size.width,
+        node.size.height,
+      ).inflate(20); // Padding for selection effects
+
+      // Get previous rect
+      final prevRect = _previousNodeRects[nodeId];
+
+      if (prevRect != null) {
+        // Union of old and new positions
+        dirtyRect = dirtyRect == null
+            ? currentRect.expandToInclude(prevRect)
+            : dirtyRect.expandToInclude(currentRect.expandToInclude(prevRect));
+      } else {
+        // First drag frame - use current rect
+        dirtyRect = dirtyRect == null
+            ? currentRect
+            : dirtyRect.expandToInclude(currentRect);
+      }
+
+      // Store current rect for next frame
+      _previousNodeRects[nodeId] = currentRect;
+    }
+
+    _previousDirtyRect = dirtyRect;
+    return dirtyRect;
   }
 
   // ============================================================================
@@ -130,7 +209,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
 
   void _handleDoubleTap() {
     if (_currentPointer == null) return;
-    
+
     // Only allow editing in select mode
     if (widget.activeTool != CanvasTool.select) return;
 
@@ -199,6 +278,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
       setState(() {
         _draggedNodeId = node.id;
         _dragStart = position;
+        _previousNodeRects.clear(); // Reset dirty rect tracking
       });
       widget.nodeManager.selectNode(node.id);
     } else {
@@ -214,7 +294,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
     if (_draggedNodeId != null) {
       // Drag node(s) with boundary constraints
       final snappedDelta = widget.snapToGrid ? _snapToGrid(delta) : delta;
-      
+
       if (widget.nodeManager.selectedNodeIds.contains(_draggedNodeId)) {
         // Move all selected nodes with constraints
         _moveSelectedNodesConstrained(snappedDelta);
@@ -242,6 +322,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
       _dragStart = null;
       _selectBoxStart = null;
       _selectBoxEnd = null;
+      _previousNodeRects.clear(); // Clear dirty rect cache
     });
   }
 
@@ -255,13 +336,19 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
         : position;
 
     // Ensure node stays within bounds
-    final constrainedPosition = _constrainToBounds(snappedPosition, const Size(140, 80));
+    final constrainedPosition = _constrainToBounds(
+      snappedPosition,
+      const Size(140, 80),
+    );
 
     final theme = widget.themeManager.currentTheme;
-    final node = CanvasNode.createBasicNode(constrainedPosition, theme.accentColor);
-    
+    final node = CanvasNode.createBasicNode(
+      constrainedPosition,
+      theme.accentColor,
+    );
+
     widget.nodeManager.addNode(node);
-    
+
     // Open editor immediately
     _openNodeEditor(node.id);
   }
@@ -276,13 +363,19 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
         : position;
 
     // Ensure text block stays within bounds
-    final constrainedPosition = _constrainToBounds(snappedPosition, const Size(200, 60));
+    final constrainedPosition = _constrainToBounds(
+      snappedPosition,
+      const Size(200, 60),
+    );
 
     final theme = widget.themeManager.currentTheme;
-    final node = CanvasNode.createTextBlock(constrainedPosition, theme.textColor);
-    
+    final node = CanvasNode.createTextBlock(
+      constrainedPosition,
+      theme.textColor,
+    );
+
     widget.nodeManager.addNode(node);
-    
+
     // Open editor immediately
     _openNodeEditor(node.id);
   }
@@ -302,7 +395,10 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
         : position;
 
     // Ensure shape stays within bounds
-    final constrainedPosition = _constrainToBounds(snappedPosition, const Size(120, 120));
+    final constrainedPosition = _constrainToBounds(
+      snappedPosition,
+      const Size(120, 120),
+    );
 
     final theme = widget.themeManager.currentTheme;
     final node = CanvasNode.createShape(
@@ -310,9 +406,9 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
       widget.selectedShapeType!,
       theme.accentColor,
     );
-    
+
     widget.nodeManager.addNode(node);
-    
+
     // Notify parent that shape was placed (but don't close panel)
     widget.onShapePlaced?.call();
   }
@@ -412,10 +508,7 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
     final maxX = _canvasSize!.width - nodeSize.width;
     final maxY = _canvasSize!.height - nodeSize.height;
 
-    return Offset(
-      position.dx.clamp(0, maxX),
-      position.dy.clamp(0, maxY),
-    );
+    return Offset(position.dx.clamp(0, maxX), position.dy.clamp(0, maxY));
   }
 
   /// Moves a single node with boundary constraints
@@ -442,14 +535,14 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
 
     // Calculate the constrained delta that works for all selected nodes
     Offset constrainedDelta = delta;
-    
+
     for (final nodeId in widget.nodeManager.selectedNodeIds) {
       final node = widget.nodeManager.getNode(nodeId);
       if (node != null) {
         final newPosition = node.position + delta;
         final constrainedPosition = _constrainToBounds(newPosition, node.size);
         final nodeDelta = constrainedPosition - node.position;
-        
+
         // Use the most restrictive delta for all nodes
         if (nodeDelta.dx.abs() < constrainedDelta.dx.abs()) {
           constrainedDelta = Offset(nodeDelta.dx, constrainedDelta.dy);
@@ -465,10 +558,12 @@ class _InteractiveCanvasState extends State<InteractiveCanvas> {
 }
 
 // ============================================================================
-// CANVAS LAYER PAINTER
+// CANVAS LAYER PAINTER (DIRTY RECT OPTIMIZED)
 // ============================================================================
 
-/// Custom painter that combines connections and nodes
+/// Custom painter with dirty rect region invalidation
+/// Only repaints local area around moving nodes (not entire canvas)
+/// Grid layer is static cached texture - DO NOT MODIFY
 class _CanvasLayerPainter extends CustomPainter {
   final CanvasTheme theme;
   final NodeManager nodeManager;
@@ -476,6 +571,7 @@ class _CanvasLayerPainter extends CustomPainter {
   final Offset? currentPointer;
   final Offset? selectBoxStart;
   final Offset? selectBoxEnd;
+  final Rect? dirtyRect; // Region to repaint
 
   _CanvasLayerPainter({
     required this.theme,
@@ -484,24 +580,48 @@ class _CanvasLayerPainter extends CustomPainter {
     this.currentPointer,
     this.selectBoxStart,
     this.selectBoxEnd,
+    this.dirtyRect,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Apply dirty rect clipping if dragging nodes
+    if (dirtyRect != null) {
+      canvas.save();
+      canvas.clipRect(dirtyRect!);
+    }
+
+    // PERFORMANCE FIX: Only process nodes in dirty rect during drag
+    final nodesToDraw = dirtyRect != null
+        ? _getNodesInRect(dirtyRect!)
+        : nodeManager.nodes;
+
     // 1. Draw connections first (behind nodes)
     if (nodeManager.connections.isNotEmpty) {
-      final connectionPainter = ConnectionPainter(
-        connections: nodeManager.connections,
-        nodes: nodeManager.nodes,
-        theme: theme,
-      );
-      connectionPainter.paint(canvas, size);
+      // PERFORMANCE FIX: Filter connections that connect to visible nodes
+      final visibleNodeIds = nodesToDraw.map((n) => n.id).toSet();
+      final visibleConnections = nodeManager.connections.where((conn) {
+        return visibleNodeIds.contains(conn.sourceNodeId) ||
+            visibleNodeIds.contains(conn.targetNodeId);
+      }).toList();
+
+      if (visibleConnections.isNotEmpty) {
+        final nodeMap = <String, CanvasNode>{
+          for (final n in nodeManager.nodes) n.id: n,
+        };
+        final connectionPainter = ConnectionPainter(
+          connections: visibleConnections,
+          nodeMap: nodeMap,
+          theme: theme,
+        );
+        connectionPainter.paint(canvas, size);
+      }
     }
 
     // 2. Draw temporary connection line (while creating)
     if (connectionStart != null && currentPointer != null) {
       final paint = Paint()
-        ..color = theme.accentColor.withOpacity(0.6)
+        ..color = theme.accentColor.withValues(alpha: 0.6)
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
@@ -516,10 +636,11 @@ class _CanvasLayerPainter extends CustomPainter {
       );
     }
 
-    // 3. Draw nodes on top
-    if (nodeManager.nodes.isNotEmpty) {
-      final nodePainter = NodePainter(
-        nodes: nodeManager.nodes,
+    // 3. Draw nodes on top (only affected nodes)
+    if (nodesToDraw.isNotEmpty) {
+      // Use optimized painter for better performance
+      final nodePainter = OptimizedNodePainter(
+        nodes: nodesToDraw,
         theme: theme,
       );
       nodePainter.paint(canvas, size);
@@ -528,10 +649,10 @@ class _CanvasLayerPainter extends CustomPainter {
     // 4. Draw selection box (if active)
     if (selectBoxStart != null && selectBoxEnd != null) {
       final rect = Rect.fromPoints(selectBoxStart!, selectBoxEnd!);
-      
+
       // Fill
       final fillPaint = Paint()
-        ..color = theme.accentColor.withOpacity(0.1)
+        ..color = theme.accentColor.withValues(alpha: 0.1)
         ..style = PaintingStyle.fill;
       canvas.drawRect(rect, fillPaint);
 
@@ -542,6 +663,11 @@ class _CanvasLayerPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
       canvas.drawRect(rect, borderPaint);
     }
+
+    // Restore canvas if clipping was applied
+    if (dirtyRect != null) {
+      canvas.restore();
+    }
   }
 
   @override
@@ -551,6 +677,36 @@ class _CanvasLayerPainter extends CustomPainter {
         oldDelegate.connectionStart != connectionStart ||
         oldDelegate.currentPointer != currentPointer ||
         oldDelegate.selectBoxStart != selectBoxStart ||
-        oldDelegate.selectBoxEnd != selectBoxEnd;
+        oldDelegate.selectBoxEnd != selectBoxEnd ||
+        oldDelegate.dirtyRect != dirtyRect;
+  }
+
+  /// PERFORMANCE HELPER: Get only nodes that intersect with given rect
+  List<CanvasNode> _getNodesInRect(Rect rect) {
+    return nodeManager.nodes.where((node) {
+      final nodeRect = Rect.fromLTWH(
+        node.position.dx,
+        node.position.dy,
+        node.size.width,
+        node.size.height,
+      );
+      return rect.overlaps(nodeRect);
+    }).toList();
+  }
+}
+
+// ============================================================================
+// HELPER EXTENSIONS
+// ============================================================================
+
+extension RectExtensions on Rect {
+  /// Expand this rect to include another rect
+  Rect expandToInclude(Rect other) {
+    return Rect.fromLTRB(
+      left < other.left ? left : other.left,
+      top < other.top ? top : other.top,
+      right > other.right ? right : other.right,
+      bottom > other.bottom ? bottom : other.bottom,
+    );
   }
 }

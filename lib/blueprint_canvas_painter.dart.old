@@ -1,0 +1,130 @@
+import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+import 'theme_manager.dart';
+
+/// BlueprintCanvasPainter: Upgraded grid system with uniform cells
+/// 
+/// Grid Rules:
+/// - Blueprint blue color only (#2196F3)
+/// - Single uniform grid with equal squares
+/// - Fits edges perfectly (no partial cells)
+/// - Grid is pure visual reference layer
+/// - Does not alter underlying canvas functionality
+/// - Performance optimized: only renders visible area
+class BlueprintCanvasPainter extends StatefulWidget {
+  final ThemeManager themeManager;
+  final bool showGrid;
+
+  const BlueprintCanvasPainter({
+    super.key,
+    required this.themeManager,
+    required this.showGrid,
+  });
+
+  @override
+  State<BlueprintCanvasPainter> createState() => _BlueprintCanvasPainterState();
+}
+
+class _BlueprintCanvasPainterState extends State<BlueprintCanvasPainter> {
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.themeManager,
+      builder: (context, _) {
+        final theme = widget.themeManager.currentTheme;
+        
+        return CustomPaint(
+          painter: _UniformGridPainter(
+            theme: theme,
+            showGrid: widget.showGrid,
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+}
+
+/// Internal painter for the uniform grid system
+class _UniformGridPainter extends CustomPainter {
+  final CanvasTheme theme;
+  final bool showGrid;
+
+  // Grid constants
+  static const Color blueprintBlue = Color(0xFF2196F3);
+  static const double targetCellSize = 50.0; // Target cell size
+  static const double minCellSize = 20.0;
+  static const double maxCellSize = 100.0;
+
+  const _UniformGridPainter({
+    required this.theme,
+    required this.showGrid,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || !showGrid) return;
+
+    // Calculate cell size that fits perfectly
+    final cellSize = _calculatePerfectCellSize(size);
+
+    // Paint configuration for blueprint blue grid
+    final gridPaint = Paint()
+      ..color = blueprintBlue.withOpacity(0.15)
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+
+    // Calculate visible grid lines based on viewport
+    final numVerticalLines = (size.width / cellSize).ceil() + 1;
+    final numHorizontalLines = (size.height / cellSize).ceil() + 1;
+
+    // Draw vertical grid lines (optimized - only visible lines)
+    for (int i = 0; i < numVerticalLines; i++) {
+      final x = i * cellSize;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        gridPaint,
+      );
+    }
+
+    // Draw horizontal grid lines (optimized - only visible lines)
+    for (int i = 0; i < numHorizontalLines; i++) {
+      final y = i * cellSize;
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
+    }
+  }
+
+  /// Calculate cell size that fits perfectly into canvas dimensions
+  /// Ensures all grid squares are equal and edges align perfectly
+  double _calculatePerfectCellSize(Size size) {
+    // Try to get close to target size while fitting perfectly
+    final horizontalCells = (size.width / targetCellSize).round();
+    final verticalCells = (size.height / targetCellSize).round();
+    
+    // Calculate actual cell sizes that would fit perfectly
+    final horizontalCellSize = size.width / horizontalCells;
+    final verticalCellSize = size.height / verticalCells;
+    
+    // Use the smaller one to ensure square cells
+    double cellSize = horizontalCellSize < verticalCellSize 
+        ? horizontalCellSize 
+        : verticalCellSize;
+    
+    // Clamp to reasonable range
+    cellSize = cellSize.clamp(minCellSize, maxCellSize);
+    
+    return cellSize;
+  }
+
+  @override
+  bool shouldRepaint(_UniformGridPainter oldDelegate) {
+    return oldDelegate.theme != theme ||
+        oldDelegate.showGrid != showGrid;
+  }
+}

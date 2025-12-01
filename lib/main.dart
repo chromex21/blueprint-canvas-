@@ -1,25 +1,28 @@
 import 'package:flutter/material.dart';
 import 'theme_manager.dart';
-import 'enhanced_canvas_layout.dart';
+import 'services/blueprint_session_manager.dart';
+import 'widgets/blueprint_session_home.dart';
 
 void main() {
-  runApp(const DarkCanvasApp());
+  runApp(const SimpleCanvasApp());
 }
 
-class DarkCanvasApp extends StatefulWidget {
-  const DarkCanvasApp({super.key});
+class SimpleCanvasApp extends StatefulWidget {
+  const SimpleCanvasApp({super.key});
 
   @override
-  State<DarkCanvasApp> createState() => _DarkCanvasAppState();
+  State<SimpleCanvasApp> createState() => _SimpleCanvasAppState();
 }
 
-class _DarkCanvasAppState extends State<DarkCanvasApp> {
+class _SimpleCanvasAppState extends State<SimpleCanvasApp> {
   late final ThemeManager _themeManager;
+  late final BlueprintSessionManager _sessionManager;
 
   @override
   void initState() {
     super.initState();
     _themeManager = ThemeManager();
+    _sessionManager = BlueprintSessionManager();
   }
 
   @override
@@ -36,7 +39,7 @@ class _DarkCanvasAppState extends State<DarkCanvasApp> {
         final theme = _themeManager.currentTheme;
 
         return MaterialApp(
-          title: 'Dark Canvas Core',
+          title: 'Blueprint Canvas',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             brightness: theme.backgroundColor.computeLuminance() > 0.5
@@ -51,7 +54,10 @@ class _DarkCanvasAppState extends State<DarkCanvasApp> {
                   : Brightness.dark,
             ),
           ),
-          home: EnhancedCanvasLayout(themeManager: _themeManager),
+          home: BlueprintSessionHome(
+            themeManager: _themeManager,
+            sessionManager: _sessionManager,
+          ),
         );
       },
     );
